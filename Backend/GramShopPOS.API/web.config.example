@@ -1,0 +1,6 @@
+{
+  "iis_settings": {
+    "windowsAuthentication": false,
+    "anonymousAuthentication": true
+  }
+}

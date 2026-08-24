@@ -1,0 +1,27 @@
+using GramShopPOS.Domain.Enums;
+
+namespace GramShopPOS.Domain.Entities;
+
+public class BusinessSetting : BaseEntity
+{
+    public string ShopName { get; set; } = string.Empty;
+    public string? LogoPath { get; set; }
+    public string? Address { get; set; }
+    public string? Mobile { get; set; }
+    public string? Email { get; set; }
+    public string? GSTNumber { get; set; }
+    public string? InvoiceFooter { get; set; }
+    public string? ReturnPolicy { get; set; }
+    public string InvoicePrefix { get; set; } = "INV";
+    public string InvoiceNumberFormat { get; set; } = "{PREFIX}-FY{FY}-{SEQ:000000}";
+    public int FinancialYearStartMonth { get; set; } = 4;
+    public bool AllowNegativeStock { get; set; }
+    public decimal DefaultTaxPercent { get; set; }
+    public decimal LowStockDefaultLevel { get; set; } = 5;
+    public decimal NewCustomerReward { get; set; }
+    public decimal ReferrerReward { get; set; }
+    public RewardType RewardType { get; set; } = RewardType.FixedAmount;
+    public RewardTrigger RewardTrigger { get; set; } = RewardTrigger.FirstPurchase;
+    public bool ReferralStoreWise { get; set; }
+    public bool ReferralEnabled { get; set; } = true;
+}

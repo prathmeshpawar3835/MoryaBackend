@@ -1,0 +1,7 @@
+**/.dockerignore
+**/bin
+**/obj
+**/.vs
+**/logs
+**/*.user
+**/TestResults
