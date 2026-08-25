@@ -18,6 +18,7 @@ public sealed class BillingService : IBillingService
     private readonly IDocumentNumberGenerator _numbers;
     private readonly IAuditService _audit;
     private readonly IReferralService _referrals;
+    private readonly IReturnDocumentService _returns;
 
     public BillingService(
         IAppDbContext db,
@@ -25,7 +26,8 @@ public sealed class BillingService : IBillingService
         IStockEngine stock,
         IDocumentNumberGenerator numbers,
         IAuditService audit,
-        IReferralService referrals)
+        IReferralService referrals,
+        IReturnDocumentService returns)
     {
         _db = db;
         _currentUser = currentUser;
@@ -33,6 +35,7 @@ public sealed class BillingService : IBillingService
         _numbers = numbers;
         _audit = audit;
         _referrals = referrals;
+        _returns = returns;
     }
 
     public async Task<BillDto> CreateBillAsync(CreateBillRequest request, CancellationToken cancellationToken = default)
@@ -104,12 +107,66 @@ public sealed class BillingService : IBillingService
             throw new ValidationAppException("Select or create a customer before applying a referral code.");
         }
 
-        var combinedDiscount = Money.Round(request.BillDiscount + storeDiscountAmount + referralPreview.NewCustomerDiscount);
+        var birthdayDiscount = 0m;
+        if (billType == BillType.Sale && customer?.DateOfBirth is { } dob
+            && dob.Month == DateTime.UtcNow.Month && dob.Day == DateTime.UtcNow.Day
+            && settings.BirthdayDiscountPercent > 0)
+        {
+            birthdayDiscount = ReferralCalculator.ComputeBenefit(eligible, settings.BirthdayDiscountPercent, RewardType.Percentage);
+        }
+
+        var combinedDiscount = Money.Round(request.BillDiscount + storeDiscountAmount + referralPreview.NewCustomerDiscount + birthdayDiscount);
         var totals = BillCalculator.CalculateTotals(
             lineInputs.Select(l => (l.Qty, l.Rate, l.Discount, l.Tax)).ToList(),
             combinedDiscount);
 
         var salesPersonId = await StaffResolver.ResolveSalesPersonIdAsync(_db, _currentUser, storeId, request.SalesPersonId, cancellationToken);
+
+        var adjustments = request.Adjustments ?? [];
+        if (adjustments.Count > 0 && customer is null)
+        {
+            throw new ValidationAppException("A customer is required for exchange, return, or buyback during billing.");
+        }
+
+        var createdAdjustments = new List<ReturnDto>();
+        if (billType == BillType.Sale)
+        {
+            foreach (var adj in adjustments)
+            {
+                if (adj.Kind is not (ReturnKind.Return or ReturnKind.Exchange or ReturnKind.Buyback))
+                {
+                    throw new ValidationAppException("Invalid adjustment type.");
+                }
+
+                var original = await _db.Bills.AsNoTracking().FirstOrDefaultAsync(b => b.Id == adj.OriginalBillId, cancellationToken)
+                    ?? throw new NotFoundAppException("Original invoice for adjustment was not found.");
+                if (original.CustomerId != customer!.Id)
+                {
+                    throw new ValidationAppException("The original invoice does not belong to the selected customer.");
+                }
+
+                createdAdjustments.Add(await _returns.CreateCoreAsync(
+                    new CreateReturnRequest
+                    {
+                        OriginalBillId = adj.OriginalBillId,
+                        Reason = adj.Reason,
+                        SalesPersonId = salesPersonId,
+                        Items = adj.Items
+                    },
+                    adj.Kind,
+                    new ReturnCreateOptions { PostLedger = false, AmountOverride = adj.Amount },
+                    cancellationToken));
+            }
+        }
+
+        var returnAdj = Money.Round(createdAdjustments.Where(a => a.ReturnKind == ReturnKind.Return).Sum(a => a.ReturnAmount));
+        var exchangeAdj = Money.Round(createdAdjustments.Where(a => a.ReturnKind == ReturnKind.Exchange).Sum(a => a.ReturnAmount));
+        var buybackAdj = Money.Round(createdAdjustments.Where(a => a.ReturnKind == ReturnKind.Buyback).Sum(a => a.ReturnAmount));
+        var totalAdj = Money.Round(returnAdj + exchangeAdj + buybackAdj);
+        var appliedAdj = Money.Round(Math.Min(totalAdj, totals.GrandTotal));
+        var creditGenerated = Money.Round(Math.Max(0, totalAdj - totals.GrandTotal));
+        var payableBeforeWallet = Money.Round(Math.Max(0, totals.GrandTotal - totalAdj));
+        var payable = Money.Round(Math.Max(0, payableBeforeWallet - request.WalletRedeemAmount));
 
         var creditPayment = request.Payments.Where(p => p.PaymentMode == PaymentMode.Credit).Sum(p => p.Amount);
         var collected = request.Payments.Where(p => p.PaymentMode != PaymentMode.Credit).ToList();
@@ -120,7 +177,7 @@ public sealed class BillingService : IBillingService
 
         try
         {
-            BillCalculator.ValidatePayments(totals.GrandTotal, request.WalletRedeemAmount, collected.Select(p => p.Amount).ToList(), creditPayment);
+            BillCalculator.ValidatePayments(payableBeforeWallet, request.WalletRedeemAmount, collected.Select(p => p.Amount).ToList(), creditPayment);
         }
         catch (InvalidOperationException ex)
         {
@@ -153,9 +210,14 @@ public sealed class BillingService : IBillingService
         var prefix = string.IsNullOrWhiteSpace(store.InvoicePrefix) ? store.StoreCode : store.InvoicePrefix;
         var billNumber = await _numbers.NextBillNumberAsync(storeId, prefix, settings.FinancialYearStartMonth, cancellationToken);
 
-        var paid = Money.Round(collected.Sum(p => p.Amount) + request.WalletRedeemAmount);
+        var paid = Money.Round(collected.Sum(p => p.Amount) + request.WalletRedeemAmount + appliedAdj);
         var due = Money.Round(totals.GrandTotal - paid);
-        var status = due <= 0 ? BillStatus.Completed : (paid == 0 ? BillStatus.Credit : BillStatus.PartiallyPaid);
+        if (due < 0)
+        {
+            due = 0;
+        }
+
+        var status = due <= 0 ? BillStatus.Completed : (collected.Sum(p => p.Amount) + request.WalletRedeemAmount + appliedAdj == 0 ? BillStatus.Credit : BillStatus.PartiallyPaid);
 
         var bill = new Bill
         {
@@ -177,6 +239,12 @@ public sealed class BillingService : IBillingService
             ReferralDiscount = referralPreview.NewCustomerDiscount,
             StoreDiscountAmount = storeDiscountAmount,
             StoreDiscountId = request.StoreDiscountId,
+            BirthdayDiscount = birthdayDiscount,
+            ReturnAdjustment = returnAdj,
+            ExchangeAdjustment = exchangeAdj,
+            BuybackAdjustment = buybackAdj,
+            CreditGenerated = creditGenerated,
+            PayableAmount = payable,
             Notes = request.Notes,
             ExchangeOfBillId = exchangeOfBillId,
             CreatedDate = DateTime.UtcNow,
@@ -239,9 +307,28 @@ public sealed class BillingService : IBillingService
         if (customer is not null)
         {
             await AddLedgerAsync(customer, storeId, bill.Id, billNumber, totals.GrandTotal, 0, LedgerTransactionType.Sale, $"Sale {billNumber}", cancellationToken);
-            if (paid > 0)
+            foreach (var adj in createdAdjustments)
             {
-                await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, paid, LedgerTransactionType.PaymentReceived, $"Payment against {billNumber}", cancellationToken);
+                var type = adj.ReturnKind switch
+                {
+                    ReturnKind.Exchange => LedgerTransactionType.ExchangeAdjustment,
+                    ReturnKind.Buyback => LedgerTransactionType.Buyback,
+                    _ => LedgerTransactionType.Return
+                };
+                await AddLedgerAsync(customer, storeId, adj.Id, adj.ReturnNumber, 0, adj.ReturnAmount, type, $"{adj.ReturnKind} {adj.ReturnNumber} applied to {billNumber}", cancellationToken);
+            }
+
+            var collectedTotal = Money.Round(collected.Sum(p => p.Amount));
+            if (totalAdj == 0)
+            {
+                if (paid > 0)
+                {
+                    await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, paid, LedgerTransactionType.PaymentReceived, $"Payment against {billNumber}", cancellationToken);
+                }
+            }
+            else if (collectedTotal > 0)
+            {
+                await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, collectedTotal, LedgerTransactionType.PaymentReceived, $"Payment against {billNumber}", cancellationToken);
             }
 
             if (request.WalletRedeemAmount > 0)
@@ -261,12 +348,51 @@ public sealed class BillingService : IBillingService
                     CreatedDate = DateTime.UtcNow,
                     IsActive = true
                 });
-                await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, request.WalletRedeemAmount, LedgerTransactionType.WalletRedeem, $"Wallet redeemed on {billNumber}", cancellationToken);
+                await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, request.WalletRedeemAmount, LedgerTransactionType.WalletRedeem, $"Credit used in sale {billNumber}", cancellationToken);
+            }
+
+            if (creditGenerated > 0)
+            {
+                var walletRows = await _db.Customers
+                    .Where(c => c.Id == customer.Id)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(c => c.WalletBalance, c => c.WalletBalance + creditGenerated)
+                        .SetProperty(c => c.UpdatedDate, DateTime.UtcNow), cancellationToken);
+                if (walletRows == 0)
+                {
+                    throw new BusinessAppException("Could not credit the customer wallet.");
+                }
+
+                var walletAfter = await _db.Customers.AsNoTracking().Where(c => c.Id == customer.Id).Select(c => c.WalletBalance).FirstAsync(cancellationToken);
+                _db.WalletTransactions.Add(new WalletTransaction
+                {
+                    CustomerId = customer.Id,
+                    StoreId = storeId,
+                    Amount = creditGenerated,
+                    BalanceAfter = walletAfter,
+                    TransactionType = LedgerTransactionType.WalletCredit,
+                    Description = $"Credit generated from exchange/return/buyback on {billNumber}",
+                    ReferenceId = bill.Id,
+                    ReferenceNumber = billNumber,
+                    UserId = _currentUser.UserId,
+                    CreatedDate = DateTime.UtcNow,
+                    IsActive = true
+                });
             }
 
             if (billType == BillType.Sale)
             {
                 await _referrals.ProcessSaleAsync(customer, bill, request, eligible, referralPreview.NewCustomerDiscount, cancellationToken);
+            }
+        }
+
+        foreach (var adj in createdAdjustments)
+        {
+            var entity = await _db.Returns.FirstAsync(r => r.Id == adj.Id, cancellationToken);
+            entity.AppliedToBillId = bill.Id;
+            if (adj.ReturnKind == ReturnKind.Exchange)
+            {
+                entity.ExchangeBillId = bill.Id;
             }
         }
 
@@ -304,6 +430,13 @@ public sealed class BillingService : IBillingService
             ?? throw new NotFoundAppException("Bill not found.");
         _currentUser.Access().EnsureStoreAccess(bill.StoreId);
         var dto = Map(bill, _currentUser.IsAdmin);
+        var linked = await _db.Returns.AsNoTracking().Include(r => r.Items)
+            .Include(r => r.SalesPerson)
+            .Include(r => r.AppliedToBill)
+            .Where(r => r.AppliedToBillId == id || (r.ExchangeBillId == id && r.ReturnKind == ReturnKind.Exchange))
+            .OrderBy(r => r.Id)
+            .ToListAsync(cancellationToken);
+        dto.Adjustments = linked.Select(ReturnDocumentService.Map).ToList();
         await ApplyItemFulfillmentAsync(dto, cancellationToken);
         return dto;
     }
@@ -381,16 +514,69 @@ public sealed class BillingService : IBillingService
             CustomerName = customer?.Name,
             CustomerMobile = customer?.MobileNumber,
             CustomerAddress = customer?.Address,
+            CustomerCode = customer?.ReferralCode,
+            SalesPersonName = bill.SalesPersonName,
             Products = bill.Items,
             Subtotal = bill.Subtotal,
             Discount = bill.ItemDiscountTotal + bill.BillDiscount,
+            ReferralDiscount = bill.ReferralDiscount,
+            BirthdayDiscount = bill.BirthdayDiscount,
+            StoreDiscount = bill.StoreDiscountAmount,
             Tax = bill.TaxAmount,
             Total = bill.GrandTotal,
+            ReturnAdjustment = bill.ReturnAdjustment,
+            ExchangeAdjustment = bill.ExchangeAdjustment,
+            BuybackAdjustment = bill.BuybackAdjustment,
+            WalletRedeemed = bill.WalletRedeemed,
+            CreditGenerated = bill.CreditGenerated,
+            PayableAmount = bill.ReturnAdjustment + bill.ExchangeAdjustment + bill.BuybackAdjustment > 0
+                || bill.WalletRedeemed > 0
+                || bill.CreditGenerated > 0
+                || bill.PayableAmount > 0
+                ? bill.PayableAmount
+                : bill.GrandTotal,
             Payments = bill.Payments,
+            Adjustments = bill.Adjustments,
             AmountPaid = bill.PaidAmount,
             AmountDue = bill.DueAmount,
             Footer = settings.InvoiceFooter,
             ReturnPolicy = settings.ReturnPolicy
+        };
+    }
+
+    public async Task<WhatsAppShareDto> GetWhatsAppShareAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var invoice = await GetInvoiceAsync(id, cancellationToken);
+        if (string.IsNullOrWhiteSpace(invoice.CustomerMobile))
+        {
+            return new WhatsAppShareDto
+            {
+                Sent = false,
+                InvoiceNumber = invoice.InvoiceNumber,
+                Error = "Customer mobile number is not available.",
+                Message = string.Empty,
+                ShareUrl = string.Empty
+            };
+        }
+
+        var digits = new string(invoice.CustomerMobile.Where(char.IsDigit).ToArray());
+        if (digits.Length == 10)
+        {
+            digits = "91" + digits;
+        }
+
+        var hasAdj = invoice.ReturnAdjustment + invoice.ExchangeAdjustment + invoice.BuybackAdjustment > 0;
+        var extra = hasAdj ? " Your Exchange/Return/Buyback adjustment has been included in the invoice." : string.Empty;
+        var message =
+            $"Hello {invoice.CustomerName ?? "Customer"},\n\nThank you for shopping with {invoice.ShopName}.\n\nYour invoice *{invoice.InvoiceNumber}* has been generated successfully.{extra}\n\nPlease find your invoice details with the store. Final payable: ₹{invoice.PayableAmount:0.00}.\n\nThank you for choosing us.";
+        var shareUrl = $"https://wa.me/{digits}?text={Uri.EscapeDataString(message)}";
+        return new WhatsAppShareDto
+        {
+            Sent = false,
+            Phone = digits,
+            Message = message,
+            ShareUrl = shareUrl,
+            InvoiceNumber = invoice.InvoiceNumber
         };
     }
 
@@ -529,7 +715,13 @@ public sealed class BillingService : IBillingService
             WalletRedeemed = b.WalletRedeemed,
             ReferralDiscount = b.ReferralDiscount,
             StoreDiscountAmount = b.StoreDiscountAmount,
-            Notes = b.Notes
+            Notes = b.Notes,
+            BirthdayDiscount = b.BirthdayDiscount,
+            ReturnAdjustment = b.ReturnAdjustment,
+            ExchangeAdjustment = b.ExchangeAdjustment,
+            BuybackAdjustment = b.BuybackAdjustment,
+            CreditGenerated = b.CreditGenerated,
+            PayableAmount = b.PayableAmount
         });
         return await projected.ToPagedAsync(request, cancellationToken);
     }
@@ -616,18 +808,24 @@ public sealed class BillingService : IBillingService
         {
             var returned = rows.Where(r => r.OriginalBillItemId == item.Id && r.ReturnKind == ReturnKind.Return).Sum(r => r.Quantity);
             var exchanged = rows.Where(r => r.OriginalBillItemId == item.Id && r.ReturnKind == ReturnKind.Exchange).Sum(r => r.Quantity);
+            var boughtBack = rows.Where(r => r.OriginalBillItemId == item.Id && r.ReturnKind == ReturnKind.Buyback).Sum(r => r.Quantity);
             item.ReturnedQuantity = returned;
             item.ExchangedQuantity = exchanged;
-            item.RemainingQuantity = Math.Max(0, item.Quantity - returned - exchanged);
+            item.BoughtBackQuantity = boughtBack;
+            item.RemainingQuantity = Math.Max(0, item.Quantity - returned - exchanged - boughtBack);
             item.FulfillmentStatus = exchanged >= item.Quantity && item.Quantity > 0
                 ? BillItemFulfillmentStatus.Exchanged
                 : returned >= item.Quantity && item.Quantity > 0
                     ? BillItemFulfillmentStatus.Returned
-                    : exchanged > 0
-                        ? BillItemFulfillmentStatus.PartiallyExchanged
-                        : returned > 0
-                            ? BillItemFulfillmentStatus.PartiallyReturned
-                            : BillItemFulfillmentStatus.Sold;
+                    : boughtBack >= item.Quantity && item.Quantity > 0
+                        ? BillItemFulfillmentStatus.BoughtBack
+                        : exchanged > 0
+                            ? BillItemFulfillmentStatus.PartiallyExchanged
+                            : returned > 0
+                                ? BillItemFulfillmentStatus.PartiallyReturned
+                                : boughtBack > 0
+                                    ? BillItemFulfillmentStatus.PartiallyBoughtBack
+                                    : BillItemFulfillmentStatus.Sold;
         }
     }
 
@@ -658,6 +856,12 @@ public sealed class BillingService : IBillingService
         StoreDiscountAmount = b.StoreDiscountAmount,
         StoreDiscountId = b.StoreDiscountId,
         StoreDiscountName = b.StoreDiscount?.Name,
+        BirthdayDiscount = b.BirthdayDiscount,
+        ReturnAdjustment = b.ReturnAdjustment,
+        ExchangeAdjustment = b.ExchangeAdjustment,
+        BuybackAdjustment = b.BuybackAdjustment,
+        CreditGenerated = b.CreditGenerated,
+        PayableAmount = b.PayableAmount,
         Notes = b.Notes,
         Items = b.Items.Select(i => new BillItemDto
         {

@@ -16,6 +16,7 @@ public class CreateBillRequest
     public int? StoreDiscountId { get; set; }
     public IReadOnlyList<CreateBillItemRequest> Items { get; set; } = [];
     public IReadOnlyList<CreatePaymentRequest> Payments { get; set; } = [];
+    public IReadOnlyList<SaleAdjustmentRequest> Adjustments { get; set; } = [];
 }
 
 public class CreateBillItemRequest
@@ -30,6 +31,15 @@ public class CreatePaymentRequest
     public PaymentMode PaymentMode { get; set; }
     public decimal Amount { get; set; }
     public string? ReferenceNumber { get; set; }
+}
+
+public class SaleAdjustmentRequest
+{
+    public ReturnKind Kind { get; set; } = ReturnKind.Return;
+    public int OriginalBillId { get; set; }
+    public string? Reason { get; set; }
+    public decimal? Amount { get; set; }
+    public IReadOnlyList<CreateReturnItemRequest> Items { get; set; } = [];
 }
 
 public class BillDto
@@ -59,9 +69,16 @@ public class BillDto
     public decimal StoreDiscountAmount { get; set; }
     public int? StoreDiscountId { get; set; }
     public string? StoreDiscountName { get; set; }
+    public decimal BirthdayDiscount { get; set; }
+    public decimal ReturnAdjustment { get; set; }
+    public decimal ExchangeAdjustment { get; set; }
+    public decimal BuybackAdjustment { get; set; }
+    public decimal CreditGenerated { get; set; }
+    public decimal PayableAmount { get; set; }
     public string? Notes { get; set; }
     public IReadOnlyList<BillItemDto> Items { get; set; } = [];
     public IReadOnlyList<PaymentDto> Payments { get; set; } = [];
+    public IReadOnlyList<ReturnDto> Adjustments { get; set; } = [];
 }
 
 public class BillItemDto
@@ -80,6 +97,7 @@ public class BillItemDto
     public decimal ReturnedQuantity { get; set; }
     public decimal ExchangedQuantity { get; set; }
     public decimal RemainingQuantity { get; set; }
+    public decimal BoughtBackQuantity { get; set; }
     public BillItemFulfillmentStatus FulfillmentStatus { get; set; }
 }
 
@@ -148,6 +166,8 @@ public class ReturnDto
     public int? ExchangeBillId { get; set; }
     public int? SalesPersonId { get; set; }
     public string? SalesPersonName { get; set; }
+    public int? AppliedToBillId { get; set; }
+    public string? AppliedToBillNumber { get; set; }
     public IReadOnlyList<ReturnItemDto> Items { get; set; } = [];
 }
 
@@ -174,6 +194,15 @@ public class CreateExchangeRequest
     public IReadOnlyList<CreatePaymentRequest> Payments { get; set; } = [];
 }
 
+public class CreateBuybackRequest
+{
+    public int OriginalBillId { get; set; }
+    public string? Reason { get; set; }
+    public decimal? Amount { get; set; }
+    public int? SalesPersonId { get; set; }
+    public IReadOnlyList<CreateReturnItemRequest> Items { get; set; } = [];
+}
+
 public class ExchangeDto
 {
     public ReturnDto Return { get; set; } = null!;
@@ -198,14 +227,36 @@ public class InvoiceDto
     public string? CustomerName { get; set; }
     public string? CustomerMobile { get; set; }
     public string? CustomerAddress { get; set; }
+    public string? CustomerCode { get; set; }
+    public string? SalesPersonName { get; set; }
     public IReadOnlyList<BillItemDto> Products { get; set; } = [];
     public decimal Subtotal { get; set; }
     public decimal Discount { get; set; }
+    public decimal ReferralDiscount { get; set; }
+    public decimal BirthdayDiscount { get; set; }
+    public decimal StoreDiscount { get; set; }
     public decimal Tax { get; set; }
     public decimal Total { get; set; }
+    public decimal ReturnAdjustment { get; set; }
+    public decimal ExchangeAdjustment { get; set; }
+    public decimal BuybackAdjustment { get; set; }
+    public decimal WalletRedeemed { get; set; }
+    public decimal CreditGenerated { get; set; }
+    public decimal PayableAmount { get; set; }
     public IReadOnlyList<PaymentDto> Payments { get; set; } = [];
+    public IReadOnlyList<ReturnDto> Adjustments { get; set; } = [];
     public decimal AmountPaid { get; set; }
     public decimal AmountDue { get; set; }
     public string? Footer { get; set; }
     public string? ReturnPolicy { get; set; }
+}
+
+public class WhatsAppShareDto
+{
+    public bool Sent { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string ShareUrl { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string? Error { get; set; }
+    public string InvoiceNumber { get; set; } = string.Empty;
 }

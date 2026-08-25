@@ -37,8 +37,11 @@ public class IntegrationTests
     private static ReferralService Referrals(SqliteFixture fx) =>
         new(fx.Db, fx.User, new AuditService(fx.Db, fx.User));
 
+    private static ReturnDocumentService Docs(SqliteFixture fx) =>
+        new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), Referrals(fx));
+
     private static BillingService Billing(SqliteFixture fx) =>
-        new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), Referrals(fx));
+        new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), Referrals(fx), Docs(fx));
 
     [Fact]
     public async Task Admin_and_salesperson_can_login()
@@ -181,7 +184,7 @@ public class IntegrationTests
             Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 1 }],
             Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5150 }]
         });
-        var returns = new ReturnService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), billing, new AuditService(fx.Db, fx.User), Referrals(fx));
+        var returns = new ReturnService(fx.Db, fx.User, billing, new AuditService(fx.Db, fx.User), Docs(fx));
         var ret = await returns.CreateReturnAsync(new CreateReturnRequest
         {
             OriginalBillId = bill.Id,
@@ -190,6 +193,131 @@ public class IntegrationTests
         ret.ReturnAmount.Should().Be(5150);
         (await fx.Db.Bills.FindAsync(bill.Id))!.Status.Should().NotBe(BillStatus.Cancelled);
         (await fx.Db.Inventories.FirstAsync(i => i.ProductId == productId)).Quantity.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task Combined_sale_and_return_adjusts_payable_and_restores_stock()
+    {
+        await using var fx = new SqliteFixture();
+        var productId = fx.Db.Products.First().Id;
+        var customerId = fx.Db.Customers.First().Id;
+        var billing = Billing(fx);
+        var original = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = customerId,
+            Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 1 }],
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5150 }]
+        });
+        var combined = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = customerId,
+            Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 1 }],
+            Payments = [],
+            Adjustments =
+            [
+                new SaleAdjustmentRequest
+                {
+                    Kind = ReturnKind.Return,
+                    OriginalBillId = original.Id,
+                    Items = [new CreateReturnItemRequest { OriginalBillItemId = original.Items[0].Id, Quantity = 1 }]
+                }
+            ]
+        });
+        combined.GrandTotal.Should().Be(5150);
+        combined.ReturnAdjustment.Should().Be(5150);
+        combined.PayableAmount.Should().Be(0);
+        combined.DueAmount.Should().Be(0);
+        combined.Adjustments.Should().ContainSingle(a => a.ReturnKind == ReturnKind.Return);
+        (await fx.Db.Inventories.AsNoTracking().FirstAsync(i => i.ProductId == productId)).Quantity.Should().Be(9);
+    }
+
+    [Fact]
+    public async Task Combined_return_greater_than_sale_generates_wallet_credit()
+    {
+        await using var fx = new SqliteFixture();
+        var productId = fx.Db.Products.First().Id;
+        var customerId = fx.Db.Customers.First().Id;
+        var opening = (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == customerId)).WalletBalance;
+        var billing = Billing(fx);
+        var original = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = customerId,
+            Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 2 }],
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 10300 }]
+        });
+        var combined = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = customerId,
+            Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 1 }],
+            Payments = [],
+            Adjustments =
+            [
+                new SaleAdjustmentRequest
+                {
+                    Kind = ReturnKind.Return,
+                    OriginalBillId = original.Id,
+                    Items = [new CreateReturnItemRequest { OriginalBillItemId = original.Items[0].Id, Quantity = 2 }]
+                }
+            ]
+        });
+        combined.GrandTotal.Should().Be(5150);
+        combined.ReturnAdjustment.Should().Be(10300);
+        combined.CreditGenerated.Should().Be(5150);
+        combined.PayableAmount.Should().Be(0);
+        (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == customerId)).WalletBalance.Should().Be(opening + 5150);
+    }
+
+    [Fact]
+    public async Task Combined_return_rejects_already_returned_item()
+    {
+        await using var fx = new SqliteFixture();
+        var productId = fx.Db.Products.First().Id;
+        var customerId = fx.Db.Customers.First().Id;
+        var billing = Billing(fx);
+        var original = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = customerId,
+            Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 1 }],
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5150 }]
+        });
+        await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = customerId,
+            Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 1 }],
+            Payments = [],
+            Adjustments =
+            [
+                new SaleAdjustmentRequest
+                {
+                    Kind = ReturnKind.Return,
+                    OriginalBillId = original.Id,
+                    Items = [new CreateReturnItemRequest { OriginalBillItemId = original.Items[0].Id, Quantity = 1 }]
+                }
+            ]
+        });
+        var act = async () => await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = customerId,
+            Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 1 }],
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5150 }],
+            Adjustments =
+            [
+                new SaleAdjustmentRequest
+                {
+                    Kind = ReturnKind.Return,
+                    OriginalBillId = original.Id,
+                    Items = [new CreateReturnItemRequest { OriginalBillItemId = original.Items[0].Id, Quantity = 1 }]
+                }
+            ]
+        });
+        await act.Should().ThrowAsync<BusinessAppException>();
     }
 
     [Fact]

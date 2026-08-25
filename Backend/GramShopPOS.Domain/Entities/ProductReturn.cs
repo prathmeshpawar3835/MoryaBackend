@@ -16,10 +16,12 @@ public class ProductReturn : BaseEntity
     public int UserId { get; set; }
     public int? SalesPersonId { get; set; }
     public int? ExchangeBillId { get; set; }
+    public int? AppliedToBillId { get; set; }
 
     public Store Store { get; set; } = null!;
     public Bill OriginalBill { get; set; } = null!;
     public Bill? ExchangeBill { get; set; }
+    public Bill? AppliedToBill { get; set; }
     public Customer? Customer { get; set; }
     public ApplicationUser User { get; set; } = null!;
     public ApplicationUser? SalesPerson { get; set; }

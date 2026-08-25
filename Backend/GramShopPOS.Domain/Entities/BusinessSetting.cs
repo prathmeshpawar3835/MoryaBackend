@@ -24,4 +24,5 @@ public class BusinessSetting : BaseEntity
     public RewardTrigger RewardTrigger { get; set; } = RewardTrigger.FirstPurchase;
     public bool ReferralStoreWise { get; set; }
     public bool ReferralEnabled { get; set; } = true;
+    public decimal BirthdayDiscountPercent { get; set; }
 }

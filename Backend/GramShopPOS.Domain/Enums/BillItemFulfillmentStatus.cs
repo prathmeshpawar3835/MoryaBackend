@@ -6,5 +6,7 @@ public enum BillItemFulfillmentStatus
     PartiallyReturned = 2,
     Returned = 3,
     PartiallyExchanged = 4,
-    Exchanged = 5
+    Exchanged = 5,
+    PartiallyBoughtBack = 6,
+    BoughtBack = 7
 }

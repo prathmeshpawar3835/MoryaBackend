@@ -10,5 +10,6 @@ public enum LedgerTransactionType
     WalletRedeem = 6,
     ReferralCredit = 7,
     ReferralReversal = 8,
-    ExchangeAdjustment = 9
+    ExchangeAdjustment = 9,
+    Buyback = 10
 }

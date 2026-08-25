@@ -68,6 +68,16 @@ public sealed class CreateBillRequestValidator : AbstractValidator<CreateBillReq
         });
         RuleFor(x => x.BillDiscount).GreaterThanOrEqualTo(0);
         RuleFor(x => x.WalletRedeemAmount).GreaterThanOrEqualTo(0);
+        RuleForEach(x => x.Adjustments).ChildRules(a =>
+        {
+            a.RuleFor(x => x.OriginalBillId).GreaterThan(0);
+            a.RuleFor(x => x.Items).NotEmpty();
+            a.RuleForEach(x => x.Items).ChildRules(i =>
+            {
+                i.RuleFor(x => x.OriginalBillItemId).GreaterThan(0);
+                i.RuleFor(x => x.Quantity).GreaterThan(0);
+            });
+        });
     }
 }
 
@@ -109,6 +119,7 @@ public sealed class ApplicationServiceRegistration
         services.AddScoped<Interfaces.IInventoryService, Services.InventoryService>();
         services.AddScoped<Interfaces.IPurchaseService, Services.PurchaseService>();
         services.AddScoped<Interfaces.IBillingService, Services.BillingService>();
+        services.AddScoped<Services.IReturnDocumentService, Services.ReturnDocumentService>();
         services.AddScoped<Interfaces.IReturnService, Services.ReturnService>();
         services.AddScoped<Interfaces.ICustomerService, Services.CustomerService>();
         services.AddScoped<Interfaces.IReferralService, Services.ReferralService>();

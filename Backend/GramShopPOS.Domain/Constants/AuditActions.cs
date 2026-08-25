@@ -24,6 +24,7 @@ public static class AuditActions
     public const string HeldBillResumed = "HeldBillResumed";
     public const string ReturnCreated = "ReturnCreated";
     public const string ExchangeCreated = "ExchangeCreated";
+    public const string BuybackCreated = "BuybackCreated";
     public const string PaymentReceived = "PaymentReceived";
     public const string WalletUsed = "WalletUsed";
     public const string WalletCredited = "WalletCredited";

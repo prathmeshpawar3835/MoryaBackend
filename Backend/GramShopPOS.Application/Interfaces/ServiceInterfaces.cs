@@ -88,6 +88,7 @@ public interface IBillingService
     Task<PagedResponse<BillDto>> SearchBillsAsync(BillListRequest request, CancellationToken cancellationToken = default);
     Task CancelBillAsync(int id, string? reason, CancellationToken cancellationToken = default);
     Task<InvoiceDto> GetInvoiceAsync(int id, CancellationToken cancellationToken = default);
+    Task<WhatsAppShareDto> GetWhatsAppShareAsync(int id, CancellationToken cancellationToken = default);
     Task<HeldBillDto> HoldBillAsync(HeldBillRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<HeldBillDto>> GetHeldBillsAsync(int? storeId, CancellationToken cancellationToken = default);
     Task<HeldBillDto> GetHeldBillAsync(int id, CancellationToken cancellationToken = default);
@@ -101,6 +102,7 @@ public interface IReturnService
     Task<PagedResponse<ReturnDto>> GetAsync(PagedRequest request, CancellationToken cancellationToken = default);
     Task<ReturnDto> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<ExchangeDto> CreateExchangeAsync(CreateExchangeRequest request, CancellationToken cancellationToken = default);
+    Task<ReturnDto> CreateBuybackAsync(CreateBuybackRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface ICustomerService

@@ -24,6 +24,7 @@ public class SettingsDto
     public RewardType RewardType { get; set; }
     public RewardTrigger RewardTrigger { get; set; }
     public bool ReferralStoreWise { get; set; }
+    public decimal BirthdayDiscountPercent { get; set; }
     public IReadOnlyList<TaxSettingDto> TaxSettings { get; set; } = [];
 }
 

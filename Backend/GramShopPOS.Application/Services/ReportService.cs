@@ -25,13 +25,25 @@ public sealed class ReportService : IReportService
 
     public async Task<SalesReportDto> GetSalesAsync(ReportRequest request, CancellationToken cancellationToken = default)
     {
-        var query = BillQuery(request);
+        var query = BillQuery(request).Where(b => b.BillType == BillType.Sale);
         var totals = await query.GroupBy(_ => 1).Select(g => new
         {
             Sales = g.Sum(x => x.GrandTotal),
             Count = g.Count(),
             Tax = g.Sum(x => x.TaxAmount),
-            Discount = g.Sum(x => x.ItemDiscountTotal + x.BillDiscount)
+            Discount = g.Sum(x => x.ItemDiscountTotal + x.BillDiscount),
+            CreditUsed = g.Sum(x => x.WalletRedeemed),
+            CreditGenerated = g.Sum(x => x.CreditGenerated)
+        }).FirstOrDefaultAsync(cancellationToken);
+
+        var (from, to) = Range(request);
+        var returns = _db.Returns.AsNoTracking().Where(r => r.ReturnDate >= from && r.ReturnDate < to);
+        returns = FilterStore(returns, r => r.StoreId, request.StoreId);
+        var returnTotals = await returns.GroupBy(_ => 1).Select(g => new
+        {
+            ReturnAmount = g.Where(x => x.ReturnKind == ReturnKind.Return).Sum(x => x.ReturnAmount),
+            ExchangeAmount = g.Where(x => x.ReturnKind == ReturnKind.Exchange).Sum(x => x.ReturnAmount),
+            BuybackAmount = g.Where(x => x.ReturnKind == ReturnKind.Buyback).Sum(x => x.ReturnAmount)
         }).FirstOrDefaultAsync(cancellationToken);
 
         var page = await query.OrderByDescending(b => b.BillDate).Select(b => new BillDto
@@ -48,7 +60,13 @@ public sealed class ReportService : IReportService
             Status = b.Status,
             CustomerName = b.Customer != null ? b.Customer.Name : null,
             SalesPersonId = b.SalesPersonId,
-            SalesPersonName = b.SalesPerson != null ? b.SalesPerson.FullName : string.Empty
+            SalesPersonName = b.SalesPerson != null ? b.SalesPerson.FullName : string.Empty,
+            ReturnAdjustment = b.ReturnAdjustment,
+            ExchangeAdjustment = b.ExchangeAdjustment,
+            BuybackAdjustment = b.BuybackAdjustment,
+            WalletRedeemed = b.WalletRedeemed,
+            CreditGenerated = b.CreditGenerated,
+            PayableAmount = b.PayableAmount
         }).ToPagedAsync(request, cancellationToken);
 
         var ids = page.Items.Select(x => x.Id).ToList();
@@ -64,7 +82,12 @@ public sealed class ReportService : IReportService
             BillCount = totals?.Count ?? 0,
             Tax = totals?.Tax ?? 0,
             Discounts = totals?.Discount ?? 0,
-            NetSales = (totals?.Sales ?? 0) - (totals?.Discount ?? 0),
+            NetSales = totals?.Sales ?? 0,
+            ReturnAmount = returnTotals?.ReturnAmount ?? 0,
+            ExchangeAmount = returnTotals?.ExchangeAmount ?? 0,
+            BuybackAmount = returnTotals?.BuybackAmount ?? 0,
+            CreditUsed = totals?.CreditUsed ?? 0,
+            CreditGenerated = totals?.CreditGenerated ?? 0,
             PaymentBreakdown = payments,
             Bills = page
         };
@@ -73,7 +96,7 @@ public sealed class ReportService : IReportService
     public async Task<PagedResponse<ProductSalesRowDto>> GetProductSalesAsync(ReportRequest request, bool slowMoving, CancellationToken cancellationToken = default)
     {
         var (from, to) = Range(request);
-        var query = _db.BillItems.AsNoTracking().Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillDate >= from && i.Bill.BillDate < to);
+        var query = _db.BillItems.AsNoTracking().Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillType == BillType.Sale && i.Bill.BillDate >= from && i.Bill.BillDate < to);
         query = FilterStore(query, i => i.Bill.StoreId, request.StoreId);
         var grouped = query.GroupBy(i => new { i.ProductId, i.ProductCode, i.ProductName })
             .Select(g => new ProductSalesRowDto
@@ -207,7 +230,7 @@ public sealed class ReportService : IReportService
     {
         _currentUser.EnsureAdmin();
         var (from, to) = Range(request);
-        var query = _db.BillItems.AsNoTracking().Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillDate >= from && i.Bill.BillDate < to);
+        var query = _db.BillItems.AsNoTracking().Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillType == BillType.Sale && i.Bill.BillDate >= from && i.Bill.BillDate < to);
         if (request.StoreId.HasValue)
         {
             query = query.Where(i => i.Bill.StoreId == request.StoreId.Value);

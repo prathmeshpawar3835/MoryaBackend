@@ -13,35 +13,29 @@ public sealed class ReturnService : IReturnService
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _currentUser;
-    private readonly IStockEngine _stock;
-    private readonly IDocumentNumberGenerator _numbers;
     private readonly IBillingService _billing;
     private readonly IAuditService _audit;
-    private readonly IReferralService _referrals;
+    private readonly IReturnDocumentService _documents;
 
     public ReturnService(
         IAppDbContext db,
         ICurrentUser currentUser,
-        IStockEngine stock,
-        IDocumentNumberGenerator numbers,
         IBillingService billing,
         IAuditService audit,
-        IReferralService referrals)
+        IReturnDocumentService documents)
     {
         _db = db;
         _currentUser = currentUser;
-        _stock = stock;
-        _numbers = numbers;
         _billing = billing;
         _audit = audit;
-        _referrals = referrals;
+        _documents = documents;
     }
 
     public async Task<ReturnDto> CreateReturnAsync(CreateReturnRequest request, CancellationToken cancellationToken = default)
     {
         _currentUser.EnsureAuthenticated();
         await using var tx = await _db.BeginTransactionAsync(cancellationToken);
-        var result = await CreateReturnCoreAsync(request, ReturnKind.Return, null, cancellationToken);
+        var result = await _documents.CreateCoreAsync(request, ReturnKind.Return, null, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.ReturnCreated, nameof(ProductReturn), result.Id.ToString(), null, new { result.ReturnNumber, result.ReturnAmount }, result.StoreId, cancellationToken);
         return result;
@@ -51,7 +45,7 @@ public sealed class ReturnService : IReturnService
     {
         _currentUser.EnsureAuthenticated();
         await using var tx = await _db.BeginTransactionAsync(cancellationToken);
-        var ret = await CreateReturnCoreAsync(new CreateReturnRequest
+        var ret = await _documents.CreateCoreAsync(new CreateReturnRequest
         {
             OriginalBillId = request.OriginalBillId,
             Reason = request.Reason,
@@ -85,6 +79,22 @@ public sealed class ReturnService : IReturnService
             NewBill = newBill,
             DifferencePayable = Money.Round(newBill.GrandTotal - ret.ReturnAmount)
         };
+    }
+
+    public async Task<ReturnDto> CreateBuybackAsync(CreateBuybackRequest request, CancellationToken cancellationToken = default)
+    {
+        _currentUser.EnsureAuthenticated();
+        await using var tx = await _db.BeginTransactionAsync(cancellationToken);
+        var result = await _documents.CreateCoreAsync(new CreateReturnRequest
+        {
+            OriginalBillId = request.OriginalBillId,
+            Reason = request.Reason,
+            SalesPersonId = request.SalesPersonId,
+            Items = request.Items
+        }, ReturnKind.Buyback, new ReturnCreateOptions { AmountOverride = request.Amount, PostLedger = true }, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        await _audit.LogAsync(AuditActions.BuybackCreated, nameof(ProductReturn), result.Id.ToString(), null, new { result.ReturnNumber, result.ReturnAmount }, result.StoreId, cancellationToken);
+        return result;
     }
 
     public async Task<PagedResponse<ReturnDto>> GetAsync(PagedRequest request, CancellationToken cancellationToken = default)
@@ -135,140 +145,5 @@ public sealed class ReturnService : IReturnService
         return Map(entity);
     }
 
-    private async Task<ReturnDto> CreateReturnCoreAsync(
-        CreateReturnRequest request,
-        ReturnKind kind,
-        int? exchangeBillId,
-        CancellationToken cancellationToken)
-    {
-        var bill = await _db.Bills.Include(b => b.Items)
-            .FirstOrDefaultAsync(b => b.Id == request.OriginalBillId, cancellationToken)
-            ?? throw new NotFoundAppException("Original bill not found.");
-        _currentUser.Access().EnsureStoreAccess(bill.StoreId);
-        if (bill.Status == BillStatus.Cancelled)
-        {
-            throw new BusinessAppException("Cannot return a cancelled bill.");
-        }
-
-        if (request.Items.Count == 0)
-        {
-            throw new ValidationAppException("Return must contain items.");
-        }
-
-        var settings = await _db.BusinessSettings.FirstAsync(cancellationToken);
-        var salesPersonId = await StaffResolver.ResolveSalesPersonIdAsync(_db, _currentUser, bill.StoreId, request.SalesPersonId, cancellationToken);
-        var returnNumber = await _numbers.NextReturnNumberAsync(bill.StoreId, "CN", settings.FinancialYearStartMonth, cancellationToken);
-
-        var ret = new ProductReturn
-        {
-            StoreId = bill.StoreId,
-            OriginalBillId = bill.Id,
-            OriginalBillNumber = bill.BillNumber,
-            ReturnNumber = returnNumber,
-            ReturnDate = DateTime.UtcNow,
-            CustomerId = bill.CustomerId,
-            Reason = request.Reason,
-            ReturnKind = kind,
-            UserId = _currentUser.UserId,
-            SalesPersonId = salesPersonId,
-            ExchangeBillId = exchangeBillId,
-            CreatedDate = DateTime.UtcNow,
-            CreatedBy = _currentUser.UserId,
-            IsActive = true
-        };
-        _db.Returns.Add(ret);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        decimal amount = 0;
-        foreach (var item in request.Items)
-        {
-            var billItem = bill.Items.FirstOrDefault(i => i.Id == item.OriginalBillItemId)
-                ?? throw new ValidationAppException("Return item does not belong to the original bill.");
-            if (item.Quantity <= 0 || item.Quantity > billItem.Quantity)
-            {
-                throw new ValidationAppException("Invalid return quantity.");
-            }
-
-            var alreadyReturned = await _db.ReturnItems
-                .Where(ri => ri.OriginalBillItemId == billItem.Id)
-                .SumAsync(ri => (decimal?)ri.Quantity, cancellationToken) ?? 0;
-            if (alreadyReturned + item.Quantity > billItem.Quantity)
-            {
-                throw new BusinessAppException($"Quantity exceeds remaining returnable quantity for {billItem.ProductCode}.");
-            }
-
-            var lineTotal = Money.Round(billItem.Total * (item.Quantity / billItem.Quantity));
-            amount += lineTotal;
-            _db.ReturnItems.Add(new ReturnItem
-            {
-                ProductReturnId = ret.Id,
-                OriginalBillItemId = billItem.Id,
-                ProductId = billItem.ProductId,
-                ProductCode = billItem.ProductCode,
-                ProductName = billItem.ProductName,
-                Quantity = item.Quantity,
-                Rate = billItem.Rate,
-                TaxAmount = Money.Round(billItem.TaxAmount * (item.Quantity / billItem.Quantity)),
-                Total = lineTotal,
-                CreatedDate = DateTime.UtcNow,
-                IsActive = true
-            });
-            await _stock.ChangeAsync(bill.StoreId, billItem.ProductId, item.Quantity, kind == ReturnKind.Exchange ? StockMovementType.Exchange : StockMovementType.Return, ret.Id, returnNumber, request.Reason, true, _currentUser.UserId, cancellationToken);
-        }
-
-        ret.ReturnAmount = Money.Round(amount);
-        if (bill.CustomerId.HasValue)
-        {
-            var customer = await _db.Customers.FirstAsync(c => c.Id == bill.CustomerId, cancellationToken);
-            var latest = await _db.CustomerLedgers.Where(l => l.CustomerId == customer.Id).OrderByDescending(l => l.Id).Select(l => (decimal?)l.Balance).FirstOrDefaultAsync(cancellationToken) ?? 0;
-            var balance = Money.Round(latest - ret.ReturnAmount);
-            _db.CustomerLedgers.Add(new CustomerLedger
-            {
-                CustomerId = customer.Id,
-                StoreId = bill.StoreId,
-                ReferenceId = ret.Id,
-                ReferenceNumber = returnNumber,
-                Debit = 0,
-                Credit = ret.ReturnAmount,
-                Balance = balance,
-                TransactionType = LedgerTransactionType.Return,
-                Description = $"Return {returnNumber} against {bill.BillNumber}",
-                TransactionDate = DateTime.UtcNow,
-                UserId = _currentUser.UserId,
-                CreatedDate = DateTime.UtcNow,
-                IsActive = true
-            });
-            customer.OutstandingBalance = balance;
-        }
-
-        await _db.SaveChangesAsync(cancellationToken);
-        await _referrals.AdjustForReturnAsync(bill, ret, cancellationToken);
-        return Map(ret);
-    }
-
-    private static ReturnDto Map(ProductReturn r) => new()
-    {
-        Id = r.Id,
-        StoreId = r.StoreId,
-        OriginalBillId = r.OriginalBillId,
-        OriginalBillNumber = r.OriginalBillNumber,
-        ReturnNumber = r.ReturnNumber,
-        ReturnDate = r.ReturnDate,
-        CustomerId = r.CustomerId,
-        ReturnAmount = r.ReturnAmount,
-        Reason = r.Reason,
-        ReturnKind = r.ReturnKind,
-        ExchangeBillId = r.ExchangeBillId,
-        SalesPersonId = r.SalesPersonId,
-        Items = r.Items?.Select(i => new ReturnItemDto
-        {
-            OriginalBillItemId = i.OriginalBillItemId,
-            ProductId = i.ProductId,
-            ProductCode = i.ProductCode,
-            ProductName = i.ProductName,
-            Quantity = i.Quantity,
-            Rate = i.Rate,
-            Total = i.Total
-        }).ToList() ?? []
-    };
+    private static ReturnDto Map(ProductReturn r) => ReturnDocumentService.Map(r);
 }

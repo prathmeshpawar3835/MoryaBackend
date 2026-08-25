@@ -94,6 +94,7 @@ public sealed class CustomerService : ICustomerService
             Name = request.Name.Trim(),
             MobileNumber = request.MobileNumber.Trim(),
             Address = request.Address,
+            DateOfBirth = request.DateOfBirth,
             ReferralCode = await UniqueReferralCodeAsync(cancellationToken),
             ReferredByCustomerId = referrerId,
             CreatedDate = DateTime.UtcNow,
@@ -119,6 +120,7 @@ public sealed class CustomerService : ICustomerService
         customer.Name = request.Name.Trim();
         customer.MobileNumber = request.MobileNumber.Trim();
         customer.Address = request.Address;
+        customer.DateOfBirth = request.DateOfBirth;
         customer.IsActive = request.IsActive;
         customer.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
@@ -415,6 +417,8 @@ public sealed class CustomerService : ICustomerService
         Name = c.Name,
         MobileNumber = c.MobileNumber,
         Address = c.Address,
+        DateOfBirth = c.DateOfBirth,
+        IsBirthday = c.DateOfBirth != null && c.DateOfBirth.Value.Month == DateTime.UtcNow.Month && c.DateOfBirth.Value.Day == DateTime.UtcNow.Day,
         ReferralCode = c.ReferralCode,
         CustomerCode = c.ReferralCode,
         ReferredByCustomerId = c.ReferredByCustomerId,
@@ -433,6 +437,8 @@ public sealed class CustomerService : ICustomerService
         Name = c.Name,
         MobileNumber = c.MobileNumber,
         Address = c.Address,
+        DateOfBirth = c.DateOfBirth,
+        IsBirthday = c.DateOfBirth is { } d && d.Month == DateTime.UtcNow.Month && d.Day == DateTime.UtcNow.Day,
         ReferralCode = c.ReferralCode,
         CustomerCode = c.ReferralCode,
         ReferredByCustomerId = c.ReferredByCustomerId,

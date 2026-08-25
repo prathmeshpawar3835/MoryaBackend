@@ -83,6 +83,26 @@ public sealed class BillsController : ControllerBase
     public async Task<IActionResult> InvoicePdf(int id, CancellationToken cancellationToken) =>
         Ok(await _pdf.InvoicePdfAsync(id, cancellationToken));
 
+    [HttpGet("{id:int}/whatsapp")]
+    public async Task<IActionResult> WhatsAppShare(int id, CancellationToken cancellationToken) =>
+        Ok(await _billing.GetWhatsAppShareAsync(id, cancellationToken));
+
+    [HttpPost("{id:int}/whatsapp")]
+    public async Task<IActionResult> WhatsAppSend(int id, CancellationToken cancellationToken)
+    {
+        var share = await _billing.GetWhatsAppShareAsync(id, cancellationToken);
+        if (string.IsNullOrWhiteSpace(share.ShareUrl))
+        {
+            share.Sent = false;
+            share.Error ??= "Invoice generated successfully, but WhatsApp sending failed.";
+            return Ok(share);
+        }
+
+        share.Sent = true;
+        share.Error = null;
+        return Ok(share);
+    }
+
     [HttpPost("{id:int}/cancel")]
     public async Task<IActionResult> Cancel(int id, [FromBody] CancelRequest? request, CancellationToken cancellationToken)
     {
@@ -137,4 +157,17 @@ public sealed class ExchangesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateExchangeRequest request, CancellationToken cancellationToken) =>
         StatusCode(StatusCodes.Status201Created, await _returns.CreateExchangeAsync(request, cancellationToken));
+}
+
+[ApiController]
+[Authorize]
+[Route("api/buybacks")]
+public sealed class BuybacksController : ControllerBase
+{
+    private readonly IReturnService _returns;
+    public BuybacksController(IReturnService returns) => _returns = returns;
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateBuybackRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, await _returns.CreateBuybackAsync(request, cancellationToken));
 }

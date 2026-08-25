@@ -63,6 +63,8 @@ public sealed class DashboardService : IDashboardService
         var monthReturns = returnsQuery.Where(r => r.ReturnDate >= monthStart && r.ReturnKind == ReturnKind.Return);
         var todayExchanges = returnsQuery.Where(r => r.ReturnDate >= start && r.ReturnKind == ReturnKind.Exchange);
         var monthExchanges = returnsQuery.Where(r => r.ReturnDate >= monthStart && r.ReturnKind == ReturnKind.Exchange);
+        var todayBuybacks = returnsQuery.Where(r => r.ReturnDate >= start && r.ReturnKind == ReturnKind.Buyback);
+        var monthBuybacks = returnsQuery.Where(r => r.ReturnDate >= monthStart && r.ReturnKind == ReturnKind.Buyback);
 
         var inventoryBase = _db.Inventories.AsNoTracking().Where(i => !i.IsDeleted);
         if (storeId.HasValue)
@@ -93,7 +95,7 @@ public sealed class DashboardService : IDashboardService
 
         var from = start.AddDays(-6);
         var top = await _db.BillItems.AsNoTracking()
-            .Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillDate >= from && (storeId == null || i.Bill.StoreId == storeId))
+            .Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillType == BillType.Sale && i.Bill.BillDate >= from && (storeId == null || i.Bill.StoreId == storeId))
             .GroupBy(i => new { i.ProductId, i.ProductCode, i.ProductName })
             .Select(g => new ProductSalesRowDto
             {
@@ -165,7 +167,7 @@ public sealed class DashboardService : IDashboardService
         }
 
         var slow = await _db.BillItems.AsNoTracking()
-            .Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillDate >= from && (storeId == null || i.Bill.StoreId == storeId))
+            .Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillType == BillType.Sale && i.Bill.BillDate >= from && (storeId == null || i.Bill.StoreId == storeId))
             .GroupBy(i => new { i.ProductId, i.ProductCode, i.ProductName })
             .Select(g => new ProductSalesRowDto
             {
@@ -207,8 +209,10 @@ public sealed class DashboardService : IDashboardService
                 Date = g.Key,
                 ReturnAmount = g.Where(x => x.ReturnKind == ReturnKind.Return).Sum(x => x.ReturnAmount),
                 ExchangeAmount = g.Where(x => x.ReturnKind == ReturnKind.Exchange).Sum(x => x.ReturnAmount),
+                BuybackAmount = g.Where(x => x.ReturnKind == ReturnKind.Buyback).Sum(x => x.ReturnAmount),
                 ReturnCount = g.Count(x => x.ReturnKind == ReturnKind.Return),
-                ExchangeCount = g.Count(x => x.ReturnKind == ReturnKind.Exchange)
+                ExchangeCount = g.Count(x => x.ReturnKind == ReturnKind.Exchange),
+                BuybackCount = g.Count(x => x.ReturnKind == ReturnKind.Buyback)
             })
             .OrderBy(x => x.Date)
             .ToListAsync(cancellationToken);
@@ -229,6 +233,12 @@ public sealed class DashboardService : IDashboardService
             TodayExchangeCount = await todayExchanges.CountAsync(cancellationToken),
             MonthlyExchanges = await monthExchanges.SumAsync(r => (decimal?)r.ReturnAmount, cancellationToken) ?? 0,
             MonthlyExchangeCount = await monthExchanges.CountAsync(cancellationToken),
+            TodayBuybacks = await todayBuybacks.SumAsync(r => (decimal?)r.ReturnAmount, cancellationToken) ?? 0,
+            TodayBuybackCount = await todayBuybacks.CountAsync(cancellationToken),
+            MonthlyBuybacks = await monthBuybacks.SumAsync(r => (decimal?)r.ReturnAmount, cancellationToken) ?? 0,
+            MonthlyBuybackCount = await monthBuybacks.CountAsync(cancellationToken),
+            TodayCreditUsed = await todayBills.SumAsync(b => (decimal?)b.WalletRedeemed, cancellationToken) ?? 0,
+            TodayCreditGenerated = await todayBills.SumAsync(b => (decimal?)b.CreditGenerated, cancellationToken) ?? 0,
             TotalCustomers = totalCustomers,
             PurchasingCustomers = purchasingCustomers,
             CustomerPurchaseRatio = purchaseRatio,
@@ -310,6 +320,7 @@ public sealed class SettingsService : ISettingsService
         s.RewardType = request.RewardType;
         s.RewardTrigger = request.RewardTrigger;
         s.ReferralStoreWise = request.ReferralStoreWise;
+        s.BirthdayDiscountPercent = request.BirthdayDiscountPercent < 0 ? 0 : request.BirthdayDiscountPercent;
         s.UpdatedDate = DateTime.UtcNow;
         s.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
@@ -339,6 +350,7 @@ public sealed class SettingsService : ISettingsService
         RewardType = s.RewardType,
         RewardTrigger = s.RewardTrigger,
         ReferralStoreWise = s.ReferralStoreWise,
+        BirthdayDiscountPercent = s.BirthdayDiscountPercent,
         TaxSettings = taxes
     };
 }

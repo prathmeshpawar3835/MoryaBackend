@@ -22,6 +22,12 @@ public class Bill : BaseEntity
     public decimal ReferralDiscount { get; set; }
     public decimal StoreDiscountAmount { get; set; }
     public int? StoreDiscountId { get; set; }
+    public decimal BirthdayDiscount { get; set; }
+    public decimal ReturnAdjustment { get; set; }
+    public decimal ExchangeAdjustment { get; set; }
+    public decimal BuybackAdjustment { get; set; }
+    public decimal CreditGenerated { get; set; }
+    public decimal PayableAmount { get; set; }
     public string? Notes { get; set; }
     public int? ExchangeOfBillId { get; set; }
 

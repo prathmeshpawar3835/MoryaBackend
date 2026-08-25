@@ -73,7 +73,7 @@ public class ImportAndTransferTests
             MobileNumber = "9111111111",
             ReferralCode = referrer.ReferralCode
         });
-        var billing = new BillingService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), new ReferralService(fx.Db, fx.User, new AuditService(fx.Db, fx.User)));
+        var billing = new BillingService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), new ReferralService(fx.Db, fx.User, new AuditService(fx.Db, fx.User)), new ReturnDocumentService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new ReferralService(fx.Db, fx.User, new AuditService(fx.Db, fx.User))));
         var bill = await billing.CreateBillAsync(new CreateBillRequest
         {
             StoreId = 1,

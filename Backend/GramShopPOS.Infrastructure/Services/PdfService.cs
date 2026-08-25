@@ -1,6 +1,7 @@
 using GramShopPOS.Application.DTOs.Reports;
 using GramShopPOS.Application.Exceptions;
 using GramShopPOS.Application.Interfaces;
+using GramShopPOS.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -27,6 +28,8 @@ public sealed class PdfService : IPdfService
             .Include(b => b.Payments)
             .Include(b => b.Store)
             .Include(b => b.Customer)
+            .Include(b => b.SalesPerson)
+            .Include(b => b.Payments)
             .FirstOrDefaultAsync(b => b.Id == billId, cancellationToken)
             ?? throw new NotFoundAppException("Bill not found.");
         _currentUser.Access().EnsureStoreAccess(bill.StoreId);
@@ -47,7 +50,8 @@ public sealed class PdfService : IPdfService
                 });
                 page.Content().PaddingVertical(12).Column(col =>
                 {
-                    col.Item().Text($"Customer: {bill.Customer?.Name ?? "Walk-in"}  {bill.Customer?.MobileNumber}");
+                    col.Item().Text($"Customer: {bill.Customer?.Name ?? "Walk-in"}  {bill.Customer?.MobileNumber}  Code: {bill.Customer?.ReferralCode}");
+                    col.Item().Text($"Sales Person: {bill.SalesPerson?.FullName}");
                     col.Item().Table(table =>
                     {
                         table.ColumnsDefinition(c =>
@@ -76,9 +80,18 @@ public sealed class PdfService : IPdfService
                         }
                     });
                     col.Item().AlignRight().Text($"Subtotal: {bill.Subtotal:0.00}");
+                    if (bill.ReferralDiscount > 0) col.Item().AlignRight().Text($"Referral Discount: -{bill.ReferralDiscount:0.00}");
+                    if (bill.BirthdayDiscount > 0) col.Item().AlignRight().Text($"Birthday Offer: -{bill.BirthdayDiscount:0.00}");
+                    if (bill.StoreDiscountAmount > 0) col.Item().AlignRight().Text($"Store Discount: -{bill.StoreDiscountAmount:0.00}");
                     col.Item().AlignRight().Text($"Discount: {bill.ItemDiscountTotal + bill.BillDiscount:0.00}");
                     col.Item().AlignRight().Text($"Tax: {bill.TaxAmount:0.00}");
                     col.Item().AlignRight().Text($"Grand Total: {bill.GrandTotal:0.00}").Bold();
+                    if (bill.ReturnAdjustment > 0) col.Item().AlignRight().Text($"Return Adjustment: -{bill.ReturnAdjustment:0.00}");
+                    if (bill.ExchangeAdjustment > 0) col.Item().AlignRight().Text($"Exchange Adjustment: -{bill.ExchangeAdjustment:0.00}");
+                    if (bill.BuybackAdjustment > 0) col.Item().AlignRight().Text($"Buyback Adjustment: -{bill.BuybackAdjustment:0.00}");
+                    if (bill.WalletRedeemed > 0) col.Item().AlignRight().Text($"Customer Credit Used: -{bill.WalletRedeemed:0.00}");
+                    if (bill.CreditGenerated > 0) col.Item().AlignRight().Text($"Credit Generated: {bill.CreditGenerated:0.00}");
+                    col.Item().AlignRight().Text($"Final Payable: {bill.PayableAmount:0.00}").Bold();
                     col.Item().AlignRight().Text($"Paid: {bill.PaidAmount:0.00}  Due: {bill.DueAmount:0.00}");
                     col.Item().PaddingTop(10).Text(settings.InvoiceFooter ?? string.Empty);
                     col.Item().Text(settings.ReturnPolicy ?? string.Empty).FontSize(9);
@@ -147,28 +160,58 @@ public sealed class PdfService : IPdfService
     public async Task<FileDownload> ReturnNotePdfAsync(int returnId, CancellationToken cancellationToken = default)
     {
         var ret = await _db.Returns.AsNoTracking().Include(r => r.Items)
+            .Include(r => r.Customer)
+            .Include(r => r.SalesPerson)
+            .Include(r => r.Store)
+            .Include(r => r.OriginalBill)
+            .Include(r => r.ExchangeBill).ThenInclude(b => b!.Items)
+            .Include(r => r.AppliedToBill)
             .FirstOrDefaultAsync(r => r.Id == returnId, cancellationToken)
             ?? throw new NotFoundAppException("Return not found.");
         _currentUser.Access().EnsureStoreAccess(ret.StoreId);
         var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
+        var title = ret.ReturnKind switch
+        {
+            ReturnKind.Exchange => "Exchange Receipt",
+            ReturnKind.Buyback => "Buyback Receipt",
+            _ => "Return Receipt / Credit Note"
+        };
         var bytes = Document.Create(container =>
         {
             container.Page(page =>
             {
                 page.Margin(30);
-                page.Header().Text($"{settings.ShopName} - Credit Note {ret.ReturnNumber}").FontSize(16).Bold();
+                page.Header().Text($"{settings.ShopName} - {title} {ret.ReturnNumber}").FontSize(16).Bold();
                 page.Content().Column(col =>
                 {
-                    col.Item().Text($"Original Bill: {ret.OriginalBillNumber}");
-                    col.Item().Text($"Date: {ret.ReturnDate:dd-MMM-yyyy}  Amount: {ret.ReturnAmount:0.00}");
+                    col.Item().Text($"Original Invoice: {ret.OriginalBillNumber}");
+                    if (ret.AppliedToBill != null) col.Item().Text($"Applied to current sale: {ret.AppliedToBill.BillNumber}");
+                    if (ret.ExchangeBill != null)
+                    {
+                        col.Item().Text($"Linked Sale / Exchange Invoice: {ret.ExchangeBill.BillNumber}");
+                        col.Item().Text($"New product value: {ret.ExchangeBill.GrandTotal:0.00}");
+                        col.Item().Text($"Difference / credit adjustment: {(ret.ExchangeBill.GrandTotal - ret.ReturnAmount):0.00}");
+                    }
+                    col.Item().Text($"Customer: {ret.Customer?.Name}  {ret.Customer?.MobileNumber}  Code: {ret.Customer?.ReferralCode}");
+                    col.Item().Text($"Store: {ret.Store.StoreName}  Sales Person: {ret.SalesPerson?.FullName}");
+                    col.Item().Text($"Date: {ret.ReturnDate:dd-MMM-yyyy HH:mm}  Amount: {ret.ReturnAmount:0.00}");
+                    col.Item().Text("Original / returned products:");
                     foreach (var item in ret.Items)
                     {
-                        col.Item().Text($"{item.ProductName}  x {item.Quantity}  = {item.Total:0.00}");
+                        col.Item().Text($"  {item.ProductName}  x {item.Quantity}  = {item.Total:0.00}");
+                    }
+                    if (ret.ExchangeBill?.Items.Count > 0)
+                    {
+                        col.Item().Text("New products:");
+                        foreach (var item in ret.ExchangeBill.Items)
+                        {
+                            col.Item().Text($"  {item.ProductName}  x {item.Quantity}  = {item.Total:0.00}");
+                        }
                     }
                 });
             });
         }).GeneratePdf();
-        return Pdf(bytes, $"credit-note-{ret.ReturnNumber}.pdf");
+        return Pdf(bytes, $"{ret.ReturnKind.ToString().ToLowerInvariant()}-{ret.ReturnNumber}.pdf");
     }
 
     public FileDownload SalesReportPdf(SalesReportDto report)

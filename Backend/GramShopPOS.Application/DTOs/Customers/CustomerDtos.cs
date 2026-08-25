@@ -10,6 +10,8 @@ public class CustomerDto
     public string Name { get; set; } = string.Empty;
     public string MobileNumber { get; set; } = string.Empty;
     public string? Address { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
+    public bool IsBirthday { get; set; }
     public string ReferralCode { get; set; } = string.Empty;
     public string CustomerCode { get; set; } = string.Empty;
     public int? ReferredByCustomerId { get; set; }
@@ -26,6 +28,7 @@ public class CreateCustomerRequest
     public string Name { get; set; } = string.Empty;
     public string MobileNumber { get; set; } = string.Empty;
     public string? Address { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
     public string? ReferralCode { get; set; }
     public string? ReferringMobileNumber { get; set; }
 }
@@ -35,6 +38,7 @@ public class UpdateCustomerRequest
     public string Name { get; set; } = string.Empty;
     public string MobileNumber { get; set; } = string.Empty;
     public string? Address { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
     public bool IsActive { get; set; } = true;
 }
 

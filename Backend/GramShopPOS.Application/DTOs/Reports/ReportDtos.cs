@@ -16,6 +16,12 @@ public class DashboardDto
     public int TodayExchangeCount { get; set; }
     public decimal MonthlyExchanges { get; set; }
     public int MonthlyExchangeCount { get; set; }
+    public decimal TodayBuybacks { get; set; }
+    public int TodayBuybackCount { get; set; }
+    public decimal MonthlyBuybacks { get; set; }
+    public int MonthlyBuybackCount { get; set; }
+    public decimal TodayCreditUsed { get; set; }
+    public decimal TodayCreditGenerated { get; set; }
     public int TotalCustomers { get; set; }
     public int PurchasingCustomers { get; set; }
     public decimal CustomerPurchaseRatio { get; set; }
@@ -59,8 +65,10 @@ public class ExchangeReturnChartPointDto
     public DateTime Date { get; set; }
     public decimal ExchangeAmount { get; set; }
     public decimal ReturnAmount { get; set; }
+    public decimal BuybackAmount { get; set; }
     public int ExchangeCount { get; set; }
     public int ReturnCount { get; set; }
+    public int BuybackCount { get; set; }
 }
 
 public class PaymentModeSummaryDto
@@ -83,6 +91,11 @@ public class SalesReportDto
     public decimal Tax { get; set; }
     public decimal Discounts { get; set; }
     public decimal NetSales { get; set; }
+    public decimal ReturnAmount { get; set; }
+    public decimal ExchangeAmount { get; set; }
+    public decimal BuybackAmount { get; set; }
+    public decimal CreditUsed { get; set; }
+    public decimal CreditGenerated { get; set; }
     public IReadOnlyList<PaymentModeSummaryDto> PaymentBreakdown { get; set; } = [];
     public Common.PagedResponse<Billing.BillDto> Bills { get; set; } = Common.PagedResponse<Billing.BillDto>.Create([], 1, 20, 0);
 }
