@@ -191,15 +191,13 @@ public sealed class BillingService : IBillingService
                 throw new ValidationAppException("A customer is required to redeem wallet balance.");
             }
 
-            var walletRows = await _db.Customers
-                .Where(c => c.Id == customer.Id && c.WalletBalance >= request.WalletRedeemAmount)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(c => c.WalletBalance, c => c.WalletBalance - request.WalletRedeemAmount)
-                    .SetProperty(c => c.UpdatedDate, DateTime.UtcNow), cancellationToken);
-            if (walletRows == 0)
+            if (customer.WalletBalance < request.WalletRedeemAmount)
             {
                 throw new BusinessAppException("Insufficient wallet balance or wallet was updated concurrently.");
             }
+
+            customer.WalletBalance = Money.Round(customer.WalletBalance - request.WalletRedeemAmount);
+            customer.UpdatedDate = DateTime.UtcNow;
         }
 
         if (creditPayment > 0 && customer is null)
@@ -333,13 +331,12 @@ public sealed class BillingService : IBillingService
 
             if (request.WalletRedeemAmount > 0)
             {
-                var walletAfter = await _db.Customers.AsNoTracking().Where(c => c.Id == customer.Id).Select(c => c.WalletBalance).FirstAsync(cancellationToken);
                 _db.WalletTransactions.Add(new WalletTransaction
                 {
                     CustomerId = customer.Id,
                     StoreId = storeId,
                     Amount = -request.WalletRedeemAmount,
-                    BalanceAfter = walletAfter,
+                    BalanceAfter = customer.WalletBalance,
                     TransactionType = LedgerTransactionType.WalletRedeem,
                     Description = $"Redeemed on {billNumber}",
                     ReferenceId = bill.Id,
@@ -353,23 +350,14 @@ public sealed class BillingService : IBillingService
 
             if (creditGenerated > 0)
             {
-                var walletRows = await _db.Customers
-                    .Where(c => c.Id == customer.Id)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(c => c.WalletBalance, c => c.WalletBalance + creditGenerated)
-                        .SetProperty(c => c.UpdatedDate, DateTime.UtcNow), cancellationToken);
-                if (walletRows == 0)
-                {
-                    throw new BusinessAppException("Could not credit the customer wallet.");
-                }
-
-                var walletAfter = await _db.Customers.AsNoTracking().Where(c => c.Id == customer.Id).Select(c => c.WalletBalance).FirstAsync(cancellationToken);
+                customer.WalletBalance = Money.Round(customer.WalletBalance + creditGenerated);
+                customer.UpdatedDate = DateTime.UtcNow;
                 _db.WalletTransactions.Add(new WalletTransaction
                 {
                     CustomerId = customer.Id,
                     StoreId = storeId,
                     Amount = creditGenerated,
-                    BalanceAfter = walletAfter,
+                    BalanceAfter = customer.WalletBalance,
                     TransactionType = LedgerTransactionType.WalletCredit,
                     Description = $"Credit generated from exchange/return/buyback on {billNumber}",
                     ReferenceId = bill.Id,
@@ -476,8 +464,8 @@ public sealed class BillingService : IBillingService
 
             if (bill.WalletRedeemed > 0)
             {
-                await _db.Customers.Where(c => c.Id == customer.Id)
-                    .ExecuteUpdateAsync(s => s.SetProperty(c => c.WalletBalance, c => c.WalletBalance + bill.WalletRedeemed), cancellationToken);
+                customer.WalletBalance = Money.Round(customer.WalletBalance + bill.WalletRedeemed);
+                customer.UpdatedDate = DateTime.UtcNow;
             }
         }
 

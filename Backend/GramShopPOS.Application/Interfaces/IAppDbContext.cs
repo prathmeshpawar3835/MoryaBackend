@@ -48,4 +48,5 @@ public interface IAppDbContext
     DatabaseFacade Database { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
+    Task ReloadTrackedAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default) where TEntity : class;
 }

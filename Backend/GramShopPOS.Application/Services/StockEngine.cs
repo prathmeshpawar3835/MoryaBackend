@@ -67,7 +67,8 @@ public sealed class StockEngine : IStockEngine
             throw new InsufficientStockException("Insufficient stock or the stock was updated by another transaction.");
         }
 
-        var updated = await _db.Inventories.AsNoTracking().FirstAsync(i => i.Id == inventory.Id, cancellationToken);
+        await _db.ReloadTrackedAsync(inventory, cancellationToken);
+        var updated = inventory;
         var previous = updated.Quantity - delta;
 
         _db.StockMovements.Add(new StockMovement

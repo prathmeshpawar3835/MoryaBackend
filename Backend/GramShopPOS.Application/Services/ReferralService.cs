@@ -368,8 +368,7 @@ public sealed class ReferralService : IReferralService
     {
         await _db.Customers.Where(c => c.Id == referrer.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.WalletBalance, c => c.WalletBalance + amount), cancellationToken);
-        var updated = await _db.Customers.FirstAsync(c => c.Id == referrer.Id, cancellationToken);
-        referrer.WalletBalance = updated.WalletBalance;
+        await ReloadCustomerAsync(referrer, cancellationToken);
         _db.WalletTransactions.Add(new WalletTransaction
         {
             CustomerId = referrer.Id,
@@ -385,7 +384,7 @@ public sealed class ReferralService : IReferralService
             IsActive = true
         });
         var ledger = await AddLedgerAsync(
-            updated,
+            referrer,
             bill.StoreId,
             bill.Id,
             bill.BillNumber,
@@ -436,7 +435,7 @@ public sealed class ReferralService : IReferralService
             }
         }
 
-        var updated = await _db.Customers.FirstAsync(c => c.Id == referrer.Id, cancellationToken);
+        await ReloadCustomerAsync(referrer, cancellationToken);
         if (walletDeduct > 0)
         {
             _db.WalletTransactions.Add(new WalletTransaction
@@ -444,7 +443,7 @@ public sealed class ReferralService : IReferralService
                 CustomerId = referrer.Id,
                 StoreId = originalBill.StoreId,
                 Amount = -walletDeduct,
-                BalanceAfter = updated.WalletBalance,
+                BalanceAfter = referrer.WalletBalance,
                 TransactionType = type,
                 Description = description,
                 ReferenceId = ret.Id,
@@ -456,7 +455,7 @@ public sealed class ReferralService : IReferralService
         }
 
         var ledger = await AddLedgerAsync(
-            updated,
+            referrer,
             originalBill.StoreId,
             ret.Id,
             ret.ReturnNumber,
@@ -520,5 +519,14 @@ public sealed class ReferralService : IReferralService
         customer.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         return entry;
+    }
+
+    private async Task ReloadCustomerAsync(Customer customer, CancellationToken cancellationToken)
+    {
+        var outstanding = customer.OutstandingBalance;
+        var referredBy = customer.ReferredByCustomerId;
+        await _db.ReloadTrackedAsync(customer, cancellationToken);
+        customer.OutstandingBalance = outstanding;
+        customer.ReferredByCustomerId = referredBy;
     }
 }

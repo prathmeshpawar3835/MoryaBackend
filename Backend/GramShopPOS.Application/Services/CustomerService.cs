@@ -352,13 +352,13 @@ public sealed class CustomerService : ICustomerService
             throw new BusinessAppException("Insufficient wallet balance or wallet was updated concurrently.");
         }
 
-        var updated = await _db.Customers.AsNoTracking().FirstAsync(c => c.Id == customerId, cancellationToken);
+        await _db.ReloadTrackedAsync(customer, cancellationToken);
         _db.WalletTransactions.Add(new WalletTransaction
         {
             CustomerId = customerId,
             StoreId = storeId,
             Amount = -request.Amount,
-            BalanceAfter = updated.WalletBalance,
+            BalanceAfter = customer.WalletBalance,
             TransactionType = LedgerTransactionType.WalletRedeem,
             Description = request.Notes ?? "Wallet redemption",
             UserId = _currentUser.UserId,
@@ -366,13 +366,14 @@ public sealed class CustomerService : ICustomerService
             IsActive = true
         });
         var latest = await _db.CustomerLedgers.Where(l => l.CustomerId == customerId).OrderByDescending(l => l.Id).Select(l => (decimal?)l.Balance).FirstOrDefaultAsync(cancellationToken) ?? 0;
+        var balance = Money.Round(latest - request.Amount);
         _db.CustomerLedgers.Add(new CustomerLedger
         {
             CustomerId = customerId,
             StoreId = storeId,
             Debit = 0,
             Credit = request.Amount,
-            Balance = Money.Round(latest - request.Amount),
+            Balance = balance,
             TransactionType = LedgerTransactionType.WalletRedeem,
             Description = request.Notes ?? "Wallet redemption",
             TransactionDate = DateTime.UtcNow,
@@ -380,6 +381,8 @@ public sealed class CustomerService : ICustomerService
             CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
+        customer.OutstandingBalance = balance;
+        customer.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.WalletUsed, nameof(Customer), customerId.ToString(), null, new { request.Amount }, storeId, cancellationToken);

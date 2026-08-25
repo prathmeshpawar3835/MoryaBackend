@@ -149,6 +149,23 @@ public sealed class DocumentNumberGenerator : IDocumentNumberGenerator
             throw new InvalidOperationException("Failed to allocate a document number.");
         }
 
+        if (tableName == "BillSequences")
+        {
+            var local = _db.BillSequences.Local.FirstOrDefault(x => x.StoreId == storeId && x.FinancialYearCode == fy);
+            if (local is not null)
+            {
+                await _db.ReloadTrackedAsync(local, cancellationToken);
+            }
+        }
+        else
+        {
+            var local = _db.ReturnSequences.Local.FirstOrDefault(x => x.StoreId == storeId && x.FinancialYearCode == fy);
+            if (local is not null)
+            {
+                await _db.ReloadTrackedAsync(local, cancellationToken);
+            }
+        }
+
         return Convert.ToInt32(result);
     }
 }

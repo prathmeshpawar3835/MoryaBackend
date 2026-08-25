@@ -52,6 +52,17 @@ public sealed class AppDbContext : DbContext, IAppDbContext
     public async Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
         await Database.BeginTransactionAsync(cancellationToken);
 
+    public async Task ReloadTrackedAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default) where TEntity : class
+    {
+        var entry = Entry(entity);
+        if (entry.State == EntityState.Detached)
+        {
+            return;
+        }
+
+        await entry.ReloadAsync(cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
