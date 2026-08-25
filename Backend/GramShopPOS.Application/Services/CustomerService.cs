@@ -44,11 +44,13 @@ public sealed class CustomerService : ICustomerService
 
     public async Task<CustomerDto> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var customer = await _db.Customers.AsNoTracking().Include(c => c.Store).Include(c => c.ReferredByCustomer)
-            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted, cancellationToken)
+        var dto = await _db.Customers.AsNoTracking()
+            .Where(c => c.Id == id && !c.IsDeleted)
+            .Select(MapExpr)
+            .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundAppException("Customer not found.");
-        _currentUser.Access().EnsureStoreAccess(customer.StoreId);
-        return Map(customer);
+        _currentUser.Access().EnsureStoreAccess(dto.StoreId);
+        return dto;
     }
 
     public async Task<CustomerDto> CreateAsync(CreateCustomerRequest request, CancellationToken cancellationToken = default)
@@ -429,6 +431,7 @@ public sealed class CustomerService : ICustomerService
         OutstandingBalance = c.OutstandingBalance,
         WalletBalance = c.WalletBalance,
         IsActive = c.IsActive,
+        HasCompletedSale = c.Bills.Any(b => b.BillType == BillType.Sale && b.Status != BillStatus.Cancelled),
         CreatedDate = c.CreatedDate
     };
 
@@ -449,6 +452,7 @@ public sealed class CustomerService : ICustomerService
         OutstandingBalance = c.OutstandingBalance,
         WalletBalance = c.WalletBalance,
         IsActive = c.IsActive,
+        HasCompletedSale = c.Bills.Any(b => b.BillType == BillType.Sale && b.Status != BillStatus.Cancelled),
         CreatedDate = c.CreatedDate
     };
 }

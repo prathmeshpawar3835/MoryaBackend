@@ -18,9 +18,9 @@ public class BusinessSetting : BaseEntity
     public bool AllowNegativeStock { get; set; }
     public decimal DefaultTaxPercent { get; set; }
     public decimal LowStockDefaultLevel { get; set; } = 5;
-    public decimal NewCustomerReward { get; set; }
-    public decimal ReferrerReward { get; set; }
-    public RewardType RewardType { get; set; } = RewardType.FixedAmount;
+    public decimal NewCustomerReward { get; set; } = 10;
+    public decimal ReferrerReward { get; set; } = 5;
+    public RewardType RewardType { get; set; } = RewardType.Percentage;
     public RewardTrigger RewardTrigger { get; set; } = RewardTrigger.FirstPurchase;
     public bool ReferralStoreWise { get; set; }
     public bool ReferralEnabled { get; set; } = true;

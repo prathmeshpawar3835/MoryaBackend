@@ -19,6 +19,7 @@ public class CustomerDto
     public decimal OutstandingBalance { get; set; }
     public decimal WalletBalance { get; set; }
     public bool IsActive { get; set; }
+    public bool HasCompletedSale { get; set; }
     public DateTime CreatedDate { get; set; }
 }
 

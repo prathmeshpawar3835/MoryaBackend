@@ -128,6 +128,11 @@ public sealed class ReferralService : IReferralService
             return new ReferralPreviewDto { EligibleAmount = eligibleAmount };
         }
 
+        if (string.IsNullOrWhiteSpace(referralCode) && string.IsNullOrWhiteSpace(referringMobile))
+        {
+            return new ReferralPreviewDto { EligibleAmount = eligibleAmount };
+        }
+
         var referrer = await ResolveReferrerAsync(customer, referralCode, referringMobile, storeId, settings, true, cancellationToken);
         if (referrer is null)
         {
@@ -139,7 +144,7 @@ public sealed class ReferralService : IReferralService
             var priorSales = await _db.Bills.CountAsync(
                 b => b.CustomerId == customer.Id && b.Status != BillStatus.Cancelled && b.BillType == BillType.Sale,
                 cancellationToken);
-            if (settings.RewardTrigger == RewardTrigger.FirstPurchase && priorSales > 0)
+            if (priorSales > 0)
             {
                 return new ReferralPreviewDto { EligibleAmount = eligibleAmount };
             }
@@ -176,6 +181,11 @@ public sealed class ReferralService : IReferralService
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(request.ReferralCode) && string.IsNullOrWhiteSpace(request.ReferringMobileNumber))
+        {
+            return;
+        }
+
         var already = await _db.ReferralRewards.AnyAsync(
             r => r.BillId == bill.Id && r.IsReferrerReward && !r.IsReversal,
             cancellationToken);
@@ -193,12 +203,17 @@ public sealed class ReferralService : IReferralService
         var priorSales = await _db.Bills.CountAsync(
             b => b.CustomerId == customer.Id && b.Status != BillStatus.Cancelled && b.BillType == BillType.Sale && b.Id != bill.Id,
             cancellationToken);
-        if (settings.RewardTrigger == RewardTrigger.FirstPurchase && priorSales > 0)
+        if (priorSales > 0)
         {
             return;
         }
 
         var existing = await _db.Referrals.FirstOrDefaultAsync(r => r.ReferredCustomerId == customer.Id, cancellationToken);
+        if (existing is not null && existing.BillId.HasValue && existing.BillId != bill.Id)
+        {
+            return;
+        }
+
         if (existing is null)
         {
             existing = new Referral
@@ -222,14 +237,16 @@ public sealed class ReferralService : IReferralService
             }
         }
 
-        var benefit = ReferralCalculator.ComputeBenefit(eligibleAmount, settings.ReferrerReward, settings.RewardType);
+        var benefit = bill.ReferrerBenefitAmount > 0
+            ? bill.ReferrerBenefitAmount
+            : ReferralCalculator.ComputeBenefit(eligibleAmount, settings.ReferrerReward, settings.RewardType);
         existing.BillId = bill.Id;
         existing.SalesPersonId = bill.SalesPersonId;
         existing.ReferralCode = referrer.ReferralCode;
         existing.SaleAmount = eligibleAmount;
         existing.DiscountGiven = referralDiscount;
-        existing.NewCustomerPercent = settings.RewardType == RewardType.Percentage ? settings.NewCustomerReward : 0;
-        existing.ReferrerPercent = settings.RewardType == RewardType.Percentage ? settings.ReferrerReward : 0;
+        existing.NewCustomerPercent = bill.ReferralDiscountPercent;
+        existing.ReferrerPercent = bill.ReferrerBenefitPercent;
         existing.RewardAmount = benefit;
         existing.Status = benefit > 0 ? ReferralRewardStatus.Credited : ReferralRewardStatus.Pending;
 
@@ -345,10 +362,6 @@ public sealed class ReferralService : IReferralService
             {
                 throw new ValidationAppException("Referring customer mobile was not found.");
             }
-        }
-        else if (customer?.ReferredByCustomerId is int referredBy)
-        {
-            referrer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == referredBy && !c.IsDeleted, cancellationToken);
         }
 
         if (referrer is null)

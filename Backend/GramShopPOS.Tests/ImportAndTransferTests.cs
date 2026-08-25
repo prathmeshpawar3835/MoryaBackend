@@ -78,6 +78,7 @@ public class ImportAndTransferTests
         {
             StoreId = 1,
             CustomerId = referred.Id,
+            ReferralCode = referrer.ReferralCode,
             Items = [new CreateBillItemRequest { ProductId = fx.Db.Products.First().Id, Quantity = 1 }],
             Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5098.50m }]
         });
@@ -88,4 +89,96 @@ public class ImportAndTransferTests
         fx.Db.Referrals.Should().ContainSingle();
         fx.Db.CustomerLedgers.Should().Contain(l => l.CustomerId == referrer.Id && l.Credit == 100 && l.TransactionType == LedgerTransactionType.ReferralCredit);
     }
+
+    [Fact]
+    public async Task Referral_does_not_apply_on_sale_without_code_even_if_customer_was_linked()
+    {
+        await using var fx = new SqliteFixture();
+        var referrer = fx.Db.Customers.First();
+        var customers = new CustomerService(fx.Db, fx.User, new AuditService(fx.Db, fx.User));
+        var referred = await customers.CreateAsync(new Application.DTOs.Customers.CreateCustomerRequest
+        {
+            StoreId = 1,
+            Name = "Linked Customer",
+            MobileNumber = "9111111112",
+            ReferralCode = referrer.ReferralCode
+        });
+        var billing = CreateBilling(fx);
+        var bill = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = referred.Id,
+            Items = [new CreateBillItemRequest { ProductId = fx.Db.Products.First().Id, Quantity = 1 }],
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5150m }]
+        });
+        bill.ReferralDiscount.Should().Be(0);
+        bill.GrandTotal.Should().Be(5150m);
+        (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == referrer.Id)).WalletBalance.Should().Be(500);
+        fx.Db.Referrals.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Referral_discount_applies_only_on_first_invoice_and_snapshots_configured_percent()
+    {
+        await using var fx = new SqliteFixture();
+        var settings = fx.Db.BusinessSettings.First();
+        settings.RewardType = RewardType.Percentage;
+        settings.NewCustomerReward = 10;
+        settings.ReferrerReward = 5;
+        fx.Db.SaveChanges();
+
+        var referrer = fx.Db.Customers.First();
+        var customers = new CustomerService(fx.Db, fx.User, new AuditService(fx.Db, fx.User));
+        var referred = await customers.CreateAsync(new Application.DTOs.Customers.CreateCustomerRequest
+        {
+            StoreId = 1,
+            Name = "Percent Customer",
+            MobileNumber = "9111111113",
+            ReferralCode = referrer.ReferralCode
+        });
+        var billing = CreateBilling(fx);
+        var first = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = referred.Id,
+            ReferralCode = referrer.ReferralCode,
+            Items = [new CreateBillItemRequest { ProductId = fx.Db.Products.First().Id, Quantity = 1 }],
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 4635m }]
+        });
+        first.ReferralDiscount.Should().Be(500);
+        first.ReferralDiscountPercent.Should().Be(10);
+        first.ReferrerCode.Should().Be(referrer.ReferralCode);
+        first.GrandTotal.Should().Be(4635m);
+
+        settings.NewCustomerReward = 8;
+        settings.ReferrerReward = 3;
+        fx.Db.SaveChanges();
+
+        var invoice = await billing.GetInvoiceAsync(first.Id);
+        invoice.ReferralDiscount.Should().Be(500);
+        invoice.ReferralDiscountPercent.Should().Be(10);
+        invoice.HasReferral.Should().BeTrue();
+        invoice.ReferrerCode.Should().Be(referrer.ReferralCode);
+        invoice.CustomerName.Should().Be("Percent Customer");
+        invoice.CustomerMobile.Should().Be("9111111113");
+        invoice.CustomerCode.Should().NotBeNullOrWhiteSpace();
+        invoice.DiscountLines.Should().Contain(l => l.Type == "Referral" && l.Amount == 500 && l.Percent == 10);
+        invoice.TotalDiscount.Should().Be(500);
+
+        var second = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = referred.Id,
+            ReferralCode = referrer.ReferralCode,
+            Items = [new CreateBillItemRequest { ProductId = fx.Db.Products.First().Id, Quantity = 1 }],
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5150m }]
+        });
+        second.ReferralDiscount.Should().Be(0);
+        second.GrandTotal.Should().Be(5150m);
+        (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == referrer.Id)).WalletBalance.Should().Be(750);
+        fx.Db.Referrals.Should().ContainSingle(r => r.BillId == first.Id && r.DiscountGiven == 500 && r.NewCustomerPercent == 10);
+    }
+
+    private static BillingService CreateBilling(SqliteFixture fx) =>
+        new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), new ReferralService(fx.Db, fx.User, new AuditService(fx.Db, fx.User)), new ReturnDocumentService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new ReferralService(fx.Db, fx.User, new AuditService(fx.Db, fx.User))));
 }

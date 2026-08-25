@@ -98,7 +98,8 @@ public sealed class BillingService : IBillingService
         }
 
         var eligible = Money.Round(lineInputs.Sum(l => (l.Qty * l.Rate) - l.Discount));
-        var storeDiscountAmount = await ResolveStoreDiscountAsync(request.StoreDiscountId, storeId, eligible, cancellationToken);
+        var storeDiscount = await ResolveStoreDiscountAsync(request.StoreDiscountId, storeId, eligible, cancellationToken);
+        var storeDiscountAmount = storeDiscount.Amount;
         var referralPreview = billType == BillType.Sale && customer is not null
             ? await _referrals.PreviewAsync(customer, request.ReferralCode, request.ReferringMobileNumber, eligible, storeId, cancellationToken)
             : new DTOs.Operations.ReferralPreviewDto { EligibleAmount = eligible };
@@ -235,9 +236,22 @@ public sealed class BillingService : IBillingService
             DueAmount = due,
             WalletRedeemed = request.WalletRedeemAmount,
             ReferralDiscount = referralPreview.NewCustomerDiscount,
+            ReferralDiscountPercent = referralPreview.Applies && settings.RewardType == RewardType.Percentage
+                ? settings.NewCustomerReward
+                : 0,
+            ReferrerCustomerId = referralPreview.Referrer?.ReferrerCustomerId,
+            ReferrerName = referralPreview.Referrer?.ReferrerName,
+            ReferrerCode = referralPreview.Referrer?.ReferrerCode,
+            ReferrerBenefitPercent = referralPreview.Applies && settings.RewardType == RewardType.Percentage
+                ? settings.ReferrerReward
+                : 0,
+            ReferrerBenefitAmount = referralPreview.ReferrerBenefit,
             StoreDiscountAmount = storeDiscountAmount,
+            StoreDiscountPercent = storeDiscount.Percent,
+            StoreDiscountName = storeDiscount.Name,
             StoreDiscountId = request.StoreDiscountId,
             BirthdayDiscount = birthdayDiscount,
+            BirthdayDiscountPercent = birthdayDiscount > 0 ? settings.BirthdayDiscountPercent : 0,
             ReturnAdjustment = returnAdj,
             ExchangeAdjustment = exchangeAdj,
             BuybackAdjustment = buybackAdj,
@@ -485,6 +499,22 @@ public sealed class BillingService : IBillingService
         var customer = bill.CustomerId.HasValue
             ? await _db.Customers.AsNoTracking().FirstAsync(c => c.Id == bill.CustomerId, cancellationToken)
             : null;
+        var discountLines = InvoiceDiscountComposer.Build(
+            bill.ItemDiscountTotal,
+            bill.BillDiscount,
+            bill.ReferralDiscount,
+            bill.ReferralDiscountPercent,
+            bill.StoreDiscountAmount,
+            bill.StoreDiscountPercent,
+            bill.StoreDiscountName,
+            bill.BirthdayDiscount,
+            bill.BirthdayDiscountPercent);
+        var totalDiscount = InvoiceDiscountComposer.Total(discountLines);
+        var otherDiscount = InvoiceDiscountComposer.OtherAmount(
+            bill.BillDiscount,
+            bill.ReferralDiscount,
+            bill.StoreDiscountAmount,
+            bill.BirthdayDiscount);
         return new InvoiceDto
         {
             ShopName = settings.ShopName,
@@ -503,13 +533,27 @@ public sealed class BillingService : IBillingService
             CustomerMobile = customer?.MobileNumber,
             CustomerAddress = customer?.Address,
             CustomerCode = customer?.ReferralCode,
+            CustomerDateOfBirth = customer?.DateOfBirth,
             SalesPersonName = bill.SalesPersonName,
             Products = bill.Items,
             Subtotal = bill.Subtotal,
-            Discount = bill.ItemDiscountTotal + bill.BillDiscount,
+            ItemDiscount = bill.ItemDiscountTotal,
+            OtherDiscount = otherDiscount,
+            Discount = totalDiscount,
             ReferralDiscount = bill.ReferralDiscount,
+            ReferralDiscountPercent = bill.ReferralDiscountPercent,
             BirthdayDiscount = bill.BirthdayDiscount,
+            BirthdayDiscountPercent = bill.BirthdayDiscountPercent,
             StoreDiscount = bill.StoreDiscountAmount,
+            StoreDiscountPercent = bill.StoreDiscountPercent,
+            StoreDiscountName = bill.StoreDiscountName,
+            TotalDiscount = totalDiscount,
+            DiscountLines = discountLines,
+            HasReferral = bill.ReferralDiscount > 0 || !string.IsNullOrWhiteSpace(bill.ReferrerCode),
+            ReferrerName = bill.ReferrerName,
+            ReferrerCode = bill.ReferrerCode,
+            ReferrerBenefitPercent = bill.ReferrerBenefitPercent,
+            ReferrerBenefitAmount = bill.ReferrerBenefitAmount,
             Tax = bill.TaxAmount,
             Total = bill.GrandTotal,
             ReturnAdjustment = bill.ReturnAdjustment,
@@ -687,6 +731,7 @@ public sealed class BillingService : IBillingService
             CustomerId = b.CustomerId,
             CustomerName = b.Customer != null ? b.Customer.Name : null,
             CustomerMobile = b.Customer != null ? b.Customer.MobileNumber : null,
+            CustomerCode = b.Customer != null ? b.Customer.ReferralCode : null,
             SalesPersonId = b.SalesPersonId,
             SalesPersonName = b.SalesPerson.FullName,
             BillNumber = b.BillNumber,
@@ -702,7 +747,12 @@ public sealed class BillingService : IBillingService
             DueAmount = b.DueAmount,
             WalletRedeemed = b.WalletRedeemed,
             ReferralDiscount = b.ReferralDiscount,
+            ReferralDiscountPercent = b.ReferralDiscountPercent,
+            ReferrerName = b.ReferrerName,
+            ReferrerCode = b.ReferrerCode,
             StoreDiscountAmount = b.StoreDiscountAmount,
+            StoreDiscountPercent = b.StoreDiscountPercent,
+            StoreDiscountName = b.StoreDiscountName,
             Notes = b.Notes,
             BirthdayDiscount = b.BirthdayDiscount,
             ReturnAdjustment = b.ReturnAdjustment,
@@ -750,11 +800,13 @@ public sealed class BillingService : IBillingService
         customer.UpdatedDate = DateTime.UtcNow;
     }
 
-    private async Task<decimal> ResolveStoreDiscountAsync(int? discountId, int storeId, decimal eligible, CancellationToken cancellationToken)
+    private sealed record AppliedStoreDiscount(decimal Amount, string? Name, decimal Percent);
+
+    private async Task<AppliedStoreDiscount> ResolveStoreDiscountAsync(int? discountId, int storeId, decimal eligible, CancellationToken cancellationToken)
     {
         if (!discountId.HasValue)
         {
-            return 0;
+            return new AppliedStoreDiscount(0, null, 0);
         }
 
         var discount = await _db.StoreDiscounts.FirstOrDefaultAsync(d => d.Id == discountId && !d.IsDeleted, cancellationToken)
@@ -775,9 +827,13 @@ public sealed class BillingService : IBillingService
             throw new BusinessAppException("The selected discount has expired.");
         }
 
-        return discount.DiscountKind == DiscountKind.Percentage
+        var amount = discount.DiscountKind == DiscountKind.Percentage
             ? ReferralCalculator.ComputeBenefit(eligible, discount.Value, RewardType.Percentage)
             : ReferralCalculator.ComputeBenefit(eligible, discount.Value, RewardType.FixedAmount);
+        return new AppliedStoreDiscount(
+            amount,
+            discount.Name,
+            discount.DiscountKind == DiscountKind.Percentage ? discount.Value : 0);
     }
 
     private async Task ApplyItemFulfillmentAsync(BillDto dto, CancellationToken cancellationToken)
@@ -826,6 +882,7 @@ public sealed class BillingService : IBillingService
         CustomerId = b.CustomerId,
         CustomerName = b.Customer?.Name,
         CustomerMobile = b.Customer?.MobileNumber,
+        CustomerCode = b.Customer?.ReferralCode,
         SalesPersonId = b.SalesPersonId,
         SalesPersonName = b.SalesPerson?.FullName ?? string.Empty,
         BillNumber = b.BillNumber,
@@ -841,10 +898,18 @@ public sealed class BillingService : IBillingService
         DueAmount = b.DueAmount,
         WalletRedeemed = b.WalletRedeemed,
         ReferralDiscount = b.ReferralDiscount,
+        ReferralDiscountPercent = b.ReferralDiscountPercent,
+        ReferrerCustomerId = b.ReferrerCustomerId,
+        ReferrerName = b.ReferrerName,
+        ReferrerCode = b.ReferrerCode,
+        ReferrerBenefitPercent = b.ReferrerBenefitPercent,
+        ReferrerBenefitAmount = b.ReferrerBenefitAmount,
         StoreDiscountAmount = b.StoreDiscountAmount,
+        StoreDiscountPercent = b.StoreDiscountPercent,
         StoreDiscountId = b.StoreDiscountId,
-        StoreDiscountName = b.StoreDiscount?.Name,
+        StoreDiscountName = b.StoreDiscountName ?? b.StoreDiscount?.Name,
         BirthdayDiscount = b.BirthdayDiscount,
+        BirthdayDiscountPercent = b.BirthdayDiscountPercent,
         ReturnAdjustment = b.ReturnAdjustment,
         ExchangeAdjustment = b.ExchangeAdjustment,
         BuybackAdjustment = b.BuybackAdjustment,

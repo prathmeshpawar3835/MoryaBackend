@@ -20,9 +20,18 @@ public class Bill : BaseEntity
     public decimal DueAmount { get; set; }
     public decimal WalletRedeemed { get; set; }
     public decimal ReferralDiscount { get; set; }
+    public decimal ReferralDiscountPercent { get; set; }
+    public int? ReferrerCustomerId { get; set; }
+    public string? ReferrerName { get; set; }
+    public string? ReferrerCode { get; set; }
+    public decimal ReferrerBenefitPercent { get; set; }
+    public decimal ReferrerBenefitAmount { get; set; }
     public decimal StoreDiscountAmount { get; set; }
+    public decimal StoreDiscountPercent { get; set; }
+    public string? StoreDiscountName { get; set; }
     public int? StoreDiscountId { get; set; }
     public decimal BirthdayDiscount { get; set; }
+    public decimal BirthdayDiscountPercent { get; set; }
     public decimal ReturnAdjustment { get; set; }
     public decimal ExchangeAdjustment { get; set; }
     public decimal BuybackAdjustment { get; set; }
@@ -35,6 +44,7 @@ public class Bill : BaseEntity
     public Customer? Customer { get; set; }
     public ApplicationUser SalesPerson { get; set; } = null!;
     public StoreDiscount? StoreDiscount { get; set; }
+    public Customer? ReferrerCustomer { get; set; }
     public Bill? ExchangeOfBill { get; set; }
     public ICollection<BillItem> Items { get; set; } = new List<BillItem>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();

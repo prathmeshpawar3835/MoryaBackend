@@ -50,7 +50,31 @@ public sealed class PdfService : IPdfService
                 });
                 page.Content().PaddingVertical(12).Column(col =>
                 {
-                    col.Item().Text($"Customer: {bill.Customer?.Name ?? "Walk-in"}  {bill.Customer?.MobileNumber}  Code: {bill.Customer?.ReferralCode}");
+                    col.Item().PaddingBottom(8).Column(cust =>
+                    {
+                        cust.Item().Text("Customer Details").Bold();
+                        cust.Item().Text($"Customer Name: {bill.Customer?.Name ?? "Walk-in Customer"}");
+                        cust.Item().Text($"Mobile: {bill.Customer?.MobileNumber ?? "—"}");
+                        cust.Item().Text($"Customer Code: {bill.Customer?.ReferralCode ?? "—"}");
+                        if (!string.IsNullOrWhiteSpace(bill.Customer?.Address))
+                        {
+                            cust.Item().Text($"Address: {bill.Customer.Address}");
+                        }
+                    });
+                    if (bill.ReferralDiscount > 0 || !string.IsNullOrWhiteSpace(bill.ReferrerCode))
+                    {
+                        col.Item().PaddingBottom(8).Column(refCol =>
+                        {
+                            refCol.Item().Text("Referral Information").Bold();
+                            refCol.Item().Text($"Referral Customer: {bill.ReferrerName}");
+                            refCol.Item().Text($"Referral Code: {bill.ReferrerCode}");
+                            if (bill.ReferralDiscountPercent > 0)
+                            {
+                                refCol.Item().Text($"Referral Discount: {bill.ReferralDiscountPercent:0.##}%");
+                            }
+                            refCol.Item().Text($"Referral Discount Amount: -{bill.ReferralDiscount:0.00}");
+                        });
+                    }
                     col.Item().Text($"Sales Person: {bill.SalesPerson?.FullName}");
                     col.Item().Table(table =>
                     {
@@ -80,10 +104,27 @@ public sealed class PdfService : IPdfService
                         }
                     });
                     col.Item().AlignRight().Text($"Subtotal: {bill.Subtotal:0.00}");
-                    if (bill.ReferralDiscount > 0) col.Item().AlignRight().Text($"Referral Discount: -{bill.ReferralDiscount:0.00}");
-                    if (bill.BirthdayDiscount > 0) col.Item().AlignRight().Text($"Birthday Offer: -{bill.BirthdayDiscount:0.00}");
-                    if (bill.StoreDiscountAmount > 0) col.Item().AlignRight().Text($"Store Discount: -{bill.StoreDiscountAmount:0.00}");
-                    col.Item().AlignRight().Text($"Discount: {bill.ItemDiscountTotal + bill.BillDiscount:0.00}");
+                    if (bill.ItemDiscountTotal > 0) col.Item().AlignRight().Text($"Item Discount: -{bill.ItemDiscountTotal:0.00}");
+                    if (bill.ReferralDiscount > 0)
+                    {
+                        var pct = bill.ReferralDiscountPercent > 0 ? $" ({bill.ReferralDiscountPercent:0.##}%)" : string.Empty;
+                        col.Item().AlignRight().Text($"Referral Discount{pct}: -{bill.ReferralDiscount:0.00}");
+                    }
+                    if (bill.BirthdayDiscount > 0)
+                    {
+                        var pct = bill.BirthdayDiscountPercent > 0 ? $" ({bill.BirthdayDiscountPercent:0.##}%)" : string.Empty;
+                        col.Item().AlignRight().Text($"Birthday Offer{pct}: -{bill.BirthdayDiscount:0.00}");
+                    }
+                    if (bill.StoreDiscountAmount > 0)
+                    {
+                        var name = string.IsNullOrWhiteSpace(bill.StoreDiscountName) ? "Store Discount" : bill.StoreDiscountName;
+                        var pct = bill.StoreDiscountPercent > 0 ? $" ({bill.StoreDiscountPercent:0.##}%)" : string.Empty;
+                        col.Item().AlignRight().Text($"{name}{pct}: -{bill.StoreDiscountAmount:0.00}");
+                    }
+                    var otherDiscount = bill.BillDiscount - bill.ReferralDiscount - bill.StoreDiscountAmount - bill.BirthdayDiscount;
+                    if (otherDiscount > 0) col.Item().AlignRight().Text($"Other Discount: -{otherDiscount:0.00}");
+                    var totalDiscount = bill.ItemDiscountTotal + bill.BillDiscount;
+                    if (totalDiscount > 0) col.Item().AlignRight().Text($"Total Discount: -{totalDiscount:0.00}");
                     col.Item().AlignRight().Text($"Tax: {bill.TaxAmount:0.00}");
                     col.Item().AlignRight().Text($"Grand Total: {bill.GrandTotal:0.00}").Bold();
                     if (bill.ReturnAdjustment > 0) col.Item().AlignRight().Text($"Return Adjustment: -{bill.ReturnAdjustment:0.00}");

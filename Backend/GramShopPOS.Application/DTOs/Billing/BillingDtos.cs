@@ -66,10 +66,19 @@ public class BillDto
     public decimal DueAmount { get; set; }
     public decimal WalletRedeemed { get; set; }
     public decimal ReferralDiscount { get; set; }
+    public decimal ReferralDiscountPercent { get; set; }
+    public int? ReferrerCustomerId { get; set; }
+    public string? ReferrerName { get; set; }
+    public string? ReferrerCode { get; set; }
+    public decimal ReferrerBenefitPercent { get; set; }
+    public decimal ReferrerBenefitAmount { get; set; }
     public decimal StoreDiscountAmount { get; set; }
+    public decimal StoreDiscountPercent { get; set; }
     public int? StoreDiscountId { get; set; }
     public string? StoreDiscountName { get; set; }
     public decimal BirthdayDiscount { get; set; }
+    public decimal BirthdayDiscountPercent { get; set; }
+    public string? CustomerCode { get; set; }
     public decimal ReturnAdjustment { get; set; }
     public decimal ExchangeAdjustment { get; set; }
     public decimal BuybackAdjustment { get; set; }
@@ -228,13 +237,27 @@ public class InvoiceDto
     public string? CustomerMobile { get; set; }
     public string? CustomerAddress { get; set; }
     public string? CustomerCode { get; set; }
+    public DateOnly? CustomerDateOfBirth { get; set; }
     public string? SalesPersonName { get; set; }
     public IReadOnlyList<BillItemDto> Products { get; set; } = [];
     public decimal Subtotal { get; set; }
     public decimal Discount { get; set; }
+    public decimal ItemDiscount { get; set; }
+    public decimal OtherDiscount { get; set; }
     public decimal ReferralDiscount { get; set; }
+    public decimal ReferralDiscountPercent { get; set; }
     public decimal BirthdayDiscount { get; set; }
+    public decimal BirthdayDiscountPercent { get; set; }
     public decimal StoreDiscount { get; set; }
+    public decimal StoreDiscountPercent { get; set; }
+    public string? StoreDiscountName { get; set; }
+    public decimal TotalDiscount { get; set; }
+    public IReadOnlyList<InvoiceDiscountLineDto> DiscountLines { get; set; } = [];
+    public bool HasReferral { get; set; }
+    public string? ReferrerName { get; set; }
+    public string? ReferrerCode { get; set; }
+    public decimal ReferrerBenefitPercent { get; set; }
+    public decimal ReferrerBenefitAmount { get; set; }
     public decimal Tax { get; set; }
     public decimal Total { get; set; }
     public decimal ReturnAdjustment { get; set; }
@@ -249,6 +272,15 @@ public class InvoiceDto
     public decimal AmountDue { get; set; }
     public string? Footer { get; set; }
     public string? ReturnPolicy { get; set; }
+}
+
+public class InvoiceDiscountLineDto
+{
+    public string Type { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public decimal? Percent { get; set; }
+    public decimal Amount { get; set; }
+    public string? Reason { get; set; }
 }
 
 public class WhatsAppShareDto
