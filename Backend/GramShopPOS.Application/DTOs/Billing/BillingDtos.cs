@@ -17,6 +17,7 @@ public class CreateBillRequest
     public IReadOnlyList<CreateBillItemRequest> Items { get; set; } = [];
     public IReadOnlyList<CreatePaymentRequest> Payments { get; set; } = [];
     public IReadOnlyList<SaleAdjustmentRequest> Adjustments { get; set; } = [];
+    public int? BirthdayOfferId { get; set; }
 }
 
 public class CreateBillItemRequest
@@ -78,6 +79,8 @@ public class BillDto
     public string? StoreDiscountName { get; set; }
     public decimal BirthdayDiscount { get; set; }
     public decimal BirthdayDiscountPercent { get; set; }
+    public int? BirthdayOfferId { get; set; }
+    public string? BirthdayOfferName { get; set; }
     public string? CustomerCode { get; set; }
     public decimal ReturnAdjustment { get; set; }
     public decimal ExchangeAdjustment { get; set; }
@@ -248,6 +251,7 @@ public class InvoiceDto
     public decimal ReferralDiscountPercent { get; set; }
     public decimal BirthdayDiscount { get; set; }
     public decimal BirthdayDiscountPercent { get; set; }
+    public string? BirthdayOfferName { get; set; }
     public decimal StoreDiscount { get; set; }
     public decimal StoreDiscountPercent { get; set; }
     public string? StoreDiscountName { get; set; }

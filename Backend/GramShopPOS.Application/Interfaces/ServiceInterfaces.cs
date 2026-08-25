@@ -132,7 +132,7 @@ public interface IReferralService
 
 public interface IDiscountService
 {
-    Task<IReadOnlyList<DTOs.Operations.StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DTOs.Operations.StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, Domain.Enums.OfferCategory? category = null, CancellationToken cancellationToken = default);
     Task<DTOs.Operations.StoreDiscountDto> CreateAsync(DTOs.Operations.StoreDiscountRequest request, CancellationToken cancellationToken = default);
     Task<DTOs.Operations.StoreDiscountDto> UpdateAsync(int id, DTOs.Operations.StoreDiscountRequest request, CancellationToken cancellationToken = default);
     Task DeleteAsync(int id, CancellationToken cancellationToken = default);
@@ -169,6 +169,7 @@ public interface IReportService
     Task<PagedResponse<CustomerDueRowDto>> GetCustomerDuesAsync(ReportRequest request, CancellationToken cancellationToken = default);
     Task<PagedResponse<ReferralReportRowDto>> GetReferralsAsync(ReportRequest request, CancellationToken cancellationToken = default);
     Task<PagedResponse<ProfitReportRowDto>> GetProfitAsync(ReportRequest request, CancellationToken cancellationToken = default);
+    Task<PagedResponse<BirthdayReportRowDto>> GetBirthdaysAsync(ReportRequest request, CancellationToken cancellationToken = default);
     Task<FileDownload> ExportSalesExcelAsync(ReportRequest request, CancellationToken cancellationToken = default);
     Task<FileDownload> ExportInventoryExcelAsync(ReportRequest request, CancellationToken cancellationToken = default);
     Task<FileDownload> ExportCustomersExcelAsync(ReportRequest request, CancellationToken cancellationToken = default);

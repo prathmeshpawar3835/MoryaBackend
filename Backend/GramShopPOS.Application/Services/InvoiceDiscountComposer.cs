@@ -14,7 +14,8 @@ public static class InvoiceDiscountComposer
         decimal storePercent,
         string? storeDiscountName,
         decimal birthdayDiscount,
-        decimal birthdayPercent)
+        decimal birthdayPercent,
+        string? birthdayOfferName)
     {
         var lines = new List<InvoiceDiscountLineDto>();
         Add(lines, "Item", "Item Discount", itemDiscount, null, "Line-item discount on this invoice");
@@ -25,7 +26,13 @@ public static class InvoiceDiscountComposer
             referralDiscount,
             referralPercent,
             "New customer referral discount on this invoice only");
-        Add(lines, "Birthday", "Birthday Offer", birthdayDiscount, birthdayPercent, "Birthday offer on this invoice");
+        Add(
+            lines,
+            "Birthday",
+            string.IsNullOrWhiteSpace(birthdayOfferName) ? "Birthday Offer" : birthdayOfferName,
+            birthdayDiscount,
+            birthdayPercent,
+            "Birthday offer on this invoice only — valid on the customer's birthday");
         Add(
             lines,
             "Store",

@@ -32,6 +32,8 @@ public class Bill : BaseEntity
     public int? StoreDiscountId { get; set; }
     public decimal BirthdayDiscount { get; set; }
     public decimal BirthdayDiscountPercent { get; set; }
+    public int? BirthdayOfferId { get; set; }
+    public string? BirthdayOfferName { get; set; }
     public decimal ReturnAdjustment { get; set; }
     public decimal ExchangeAdjustment { get; set; }
     public decimal BuybackAdjustment { get; set; }
@@ -44,6 +46,7 @@ public class Bill : BaseEntity
     public Customer? Customer { get; set; }
     public ApplicationUser SalesPerson { get; set; } = null!;
     public StoreDiscount? StoreDiscount { get; set; }
+    public StoreDiscount? BirthdayOffer { get; set; }
     public Customer? ReferrerCustomer { get; set; }
     public Bill? ExchangeOfBill { get; set; }
     public ICollection<BillItem> Items { get; set; } = new List<BillItem>();

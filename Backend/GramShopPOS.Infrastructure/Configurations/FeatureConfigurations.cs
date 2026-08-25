@@ -10,8 +10,10 @@ public sealed class StoreDiscountConfiguration : IEntityTypeConfiguration<StoreD
     {
         builder.ToTable("StoreDiscounts");
         builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(500);
         builder.Property(x => x.Value).HasPrecision(18, 2);
         builder.HasIndex(x => x.StoreId);
+        builder.HasIndex(x => new { x.StoreId, x.OfferCategory });
         builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
         builder.HasQueryFilter(x => !x.IsDeleted);
     }
@@ -70,5 +72,43 @@ public sealed class RepairJobHistoryConfiguration : IEntityTypeConfiguration<Rep
         builder.Property(x => x.Notes).HasMaxLength(1000);
         builder.HasOne(x => x.RepairJob).WithMany(x => x.History).HasForeignKey(x => x.RepairJobId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class BirthdayOfferRedemptionConfiguration : IEntityTypeConfiguration<BirthdayOfferRedemption>
+{
+    public void Configure(EntityTypeBuilder<BirthdayOfferRedemption> builder)
+    {
+        builder.ToTable("BirthdayOfferRedemptions");
+        builder.Property(x => x.DiscountPercent).HasPrecision(5, 2);
+        builder.Property(x => x.DiscountAmount).HasPrecision(18, 2);
+        builder.HasIndex(x => new { x.CustomerId, x.BirthdayDate, x.Status }).IsUnique();
+        builder.HasIndex(x => x.BillId);
+        builder.HasIndex(x => x.StoreId);
+        builder.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.BirthdayOffer).WithMany().HasForeignKey(x => x.BirthdayOfferId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Bill).WithMany().HasForeignKey(x => x.BillId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.SalesPerson).WithMany().HasForeignKey(x => x.SalesPersonId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasQueryFilter(x => !x.IsDeleted);
+    }
+}
+
+public sealed class BirthdayMessageLogConfiguration : IEntityTypeConfiguration<BirthdayMessageLog>
+{
+    public void Configure(EntityTypeBuilder<BirthdayMessageLog> builder)
+    {
+        builder.ToTable("BirthdayMessageLogs");
+        builder.Property(x => x.MobileNumber).HasMaxLength(20).IsRequired();
+        builder.Property(x => x.Message).HasMaxLength(2000).IsRequired();
+        builder.Property(x => x.OfferName).HasMaxLength(200);
+        builder.Property(x => x.Error).HasMaxLength(500);
+        builder.HasIndex(x => new { x.CustomerId, x.BirthdayDate }).IsUnique();
+        builder.HasIndex(x => x.StoreId);
+        builder.HasIndex(x => x.Status);
+        builder.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.BirthdayOffer).WithMany().HasForeignKey(x => x.BirthdayOfferId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasQueryFilter(x => !x.IsDeleted);
     }
 }

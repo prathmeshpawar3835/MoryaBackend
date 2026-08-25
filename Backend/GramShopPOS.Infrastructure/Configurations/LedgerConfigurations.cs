@@ -122,6 +122,9 @@ public sealed class BusinessSettingConfiguration : IEntityTypeConfiguration<Busi
         builder.Property(x => x.ReferrerReward).Money();
         builder.Property(x => x.LowStockDefaultLevel).HasPrecision(18, 3);
         builder.Property(x => x.BirthdayDiscountPercent).HasPrecision(5, 2);
+        builder.Property(x => x.WhatsAppPhoneNumberId).HasMaxLength(50);
+        builder.Property(x => x.WhatsAppAccessToken).HasMaxLength(500);
+        builder.Property(x => x.WhatsAppApiBaseUrl).HasMaxLength(200);
     }
 }
 

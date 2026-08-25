@@ -129,5 +129,6 @@ public sealed class ApplicationServiceRegistration
         services.AddScoped<Interfaces.IDashboardService, Services.DashboardService>();
         services.AddScoped<Interfaces.IReportService, Services.ReportService>();
         services.AddScoped<Interfaces.ISettingsService, Services.SettingsService>();
+        services.AddScoped<Interfaces.IBirthdayService, Services.BirthdayService>();
     }
 }

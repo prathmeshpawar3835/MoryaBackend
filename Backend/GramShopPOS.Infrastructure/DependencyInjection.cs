@@ -23,6 +23,9 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IExcelWorkbookService, ExcelWorkbookService>();
         services.AddScoped<IPdfService, PdfService>();
+        services.AddHttpClient(nameof(WhatsAppService));
+        services.AddScoped<IWhatsAppService, WhatsAppService>();
+        services.AddHostedService<Jobs.BirthdayNotificationHostedService>();
         services.AddScoped<DatabaseSeeder>();
         return services;
     }

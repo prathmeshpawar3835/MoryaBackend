@@ -41,7 +41,7 @@ public class IntegrationTests
         new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), Referrals(fx));
 
     private static BillingService Billing(SqliteFixture fx) =>
-        new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), Referrals(fx), Docs(fx));
+        new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), Referrals(fx), Docs(fx), new BirthdayService(fx.Db, fx.User, new DisabledWhatsAppService(), new AuditService(fx.Db, fx.User)));
 
     [Fact]
     public async Task Admin_and_salesperson_can_login()

@@ -147,6 +147,10 @@ public sealed class ReportsController : ControllerBase
     public async Task<IActionResult> Referrals([FromQuery] ReportRequest request, CancellationToken cancellationToken) =>
         Ok(await _reports.GetReferralsAsync(request, cancellationToken));
 
+    [HttpGet("birthdays")]
+    public async Task<IActionResult> Birthdays([FromQuery] ReportRequest request, CancellationToken cancellationToken) =>
+        Ok(await _reports.GetBirthdaysAsync(request, cancellationToken));
+
     [Authorize(Roles = Roles.Admin)]
     [HttpGet("profit")]
     public async Task<IActionResult> Profit([FromQuery] ReportRequest request, CancellationToken cancellationToken) =>

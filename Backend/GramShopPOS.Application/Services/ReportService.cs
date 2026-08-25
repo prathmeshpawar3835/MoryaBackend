@@ -14,13 +14,15 @@ public sealed class ReportService : IReportService
     private readonly ICurrentUser _currentUser;
     private readonly IExcelWorkbookService _excel;
     private readonly IPdfService _pdf;
+    private readonly IBirthdayService _birthdays;
 
-    public ReportService(IAppDbContext db, ICurrentUser currentUser, IExcelWorkbookService excel, IPdfService pdf)
+    public ReportService(IAppDbContext db, ICurrentUser currentUser, IExcelWorkbookService excel, IPdfService pdf, IBirthdayService birthdays)
     {
         _db = db;
         _currentUser = currentUser;
         _excel = excel;
         _pdf = pdf;
+        _birthdays = birthdays;
     }
 
     public async Task<SalesReportDto> GetSalesAsync(ReportRequest request, CancellationToken cancellationToken = default)
@@ -250,6 +252,9 @@ public sealed class ReportService : IReportService
         }).OrderByDescending(x => x.BillDate);
         return await projected.ToPagedAsync(request, cancellationToken);
     }
+
+    public Task<PagedResponse<BirthdayReportRowDto>> GetBirthdaysAsync(ReportRequest request, CancellationToken cancellationToken = default) =>
+        _birthdays.GetReportAsync(request, cancellationToken);
 
     public async Task<FileDownload> ExportSalesExcelAsync(ReportRequest request, CancellationToken cancellationToken = default)
     {

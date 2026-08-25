@@ -217,6 +217,41 @@ public sealed class DashboardService : IDashboardService
             .OrderBy(x => x.Date)
             .ToListAsync(cancellationToken);
 
+        var todayDate = BusinessCalendar.Today();
+        var birthdayMonth = todayDate.Month;
+        var birthdayDay = todayDate.Day;
+        var customerQuery = _db.Customers.AsNoTracking().Where(c => !c.IsDeleted);
+        var messageQuery = _db.BirthdayMessageLogs.AsNoTracking().AsQueryable();
+        var redemptionQuery = _db.BirthdayOfferRedemptions.AsNoTracking().Where(r => r.Status == BirthdayRedemptionStatus.Redeemed);
+        if (!_currentUser.IsAdmin)
+        {
+            var ids = _currentUser.AssignedStoreIds;
+            customerQuery = customerQuery.Where(c => ids.Contains(c.StoreId));
+            messageQuery = messageQuery.Where(l => ids.Contains(l.StoreId));
+            redemptionQuery = redemptionQuery.Where(r => ids.Contains(r.StoreId));
+        }
+
+        if (storeId.HasValue)
+        {
+            customerQuery = customerQuery.Where(c => c.StoreId == storeId.Value);
+            messageQuery = messageQuery.Where(l => l.StoreId == storeId.Value);
+            redemptionQuery = redemptionQuery.Where(r => r.StoreId == storeId.Value);
+        }
+
+        var todayBirthdayCustomers = await customerQuery.CountAsync(
+            c => c.DateOfBirth != null && c.DateOfBirth.Value.Month == birthdayMonth && c.DateOfBirth.Value.Day == birthdayDay,
+            cancellationToken);
+        var todayMsgs = messageQuery.Where(l => l.BirthdayDate == todayDate);
+        var todayBirthdaySent = await todayMsgs.CountAsync(l => l.Status == WhatsAppMessageStatus.Sent, cancellationToken);
+        var todayBirthdayFailed = await todayMsgs.CountAsync(l => l.Status == WhatsAppMessageStatus.Failed, cancellationToken);
+        var todayReds = redemptionQuery.Where(r => r.BirthdayDate == todayDate);
+        var todayBirthdayRedeemed = await todayReds.CountAsync(cancellationToken);
+        var todayBirthdayDiscount = await todayReds.SumAsync(r => (decimal?)r.DiscountAmount, cancellationToken) ?? 0;
+        var monthStartDate = new DateOnly(todayDate.Year, todayDate.Month, 1);
+        var monthReds = redemptionQuery.Where(r => r.BirthdayDate >= monthStartDate);
+        var monthlyBirthdayRedeemed = await monthReds.CountAsync(cancellationToken);
+        var monthlyBirthdayDiscount = await monthReds.SumAsync(r => (decimal?)r.DiscountAmount, cancellationToken) ?? 0;
+
         return new DashboardDto
         {
             TodaySales = sales,
@@ -264,7 +299,14 @@ public sealed class DashboardService : IDashboardService
             PaymentModeSummary = payments,
             SalesChartData = chart,
             ReferralChartData = referralChart,
-            ExchangeReturnChart = erChart
+            ExchangeReturnChart = erChart,
+            TodayBirthdayCustomers = todayBirthdayCustomers,
+            TodayBirthdayMessagesSent = todayBirthdaySent,
+            TodayBirthdayMessagesFailed = todayBirthdayFailed,
+            TodayBirthdayOffersRedeemed = todayBirthdayRedeemed,
+            TodayBirthdayDiscount = todayBirthdayDiscount,
+            MonthlyBirthdayOffersRedeemed = monthlyBirthdayRedeemed,
+            MonthlyBirthdayDiscount = monthlyBirthdayDiscount
         };
     }
 }
@@ -321,6 +363,13 @@ public sealed class SettingsService : ISettingsService
         s.RewardTrigger = request.RewardTrigger;
         s.ReferralStoreWise = request.ReferralStoreWise;
         s.BirthdayDiscountPercent = request.BirthdayDiscountPercent < 0 ? 0 : request.BirthdayDiscountPercent;
+        s.WhatsAppEnabled = request.WhatsAppEnabled;
+        s.WhatsAppPhoneNumberId = request.WhatsAppPhoneNumberId;
+        if (!string.IsNullOrWhiteSpace(request.WhatsAppAccessToken) && request.WhatsAppAccessToken != "********")
+        {
+            s.WhatsAppAccessToken = request.WhatsAppAccessToken;
+        }
+        s.WhatsAppApiBaseUrl = request.WhatsAppApiBaseUrl;
         s.UpdatedDate = DateTime.UtcNow;
         s.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
@@ -351,6 +400,10 @@ public sealed class SettingsService : ISettingsService
         RewardTrigger = s.RewardTrigger,
         ReferralStoreWise = s.ReferralStoreWise,
         BirthdayDiscountPercent = s.BirthdayDiscountPercent,
+        WhatsAppEnabled = s.WhatsAppEnabled,
+        WhatsAppPhoneNumberId = s.WhatsAppPhoneNumberId,
+        WhatsAppAccessToken = string.IsNullOrWhiteSpace(s.WhatsAppAccessToken) ? null : "********",
+        WhatsAppApiBaseUrl = s.WhatsAppApiBaseUrl,
         TaxSettings = taxes
     };
 }

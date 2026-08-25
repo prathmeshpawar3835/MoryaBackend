@@ -1,3 +1,5 @@
+using GramShopPOS.Domain.Enums;
+
 namespace GramShopPOS.Application.DTOs.Reports;
 
 public class DashboardDto
@@ -48,6 +50,13 @@ public class DashboardDto
     public IReadOnlyList<SalesChartPointDto> SalesChartData { get; set; } = [];
     public IReadOnlyList<SalesChartPointDto> ReferralChartData { get; set; } = [];
     public IReadOnlyList<ExchangeReturnChartPointDto> ExchangeReturnChart { get; set; } = [];
+    public int TodayBirthdayCustomers { get; set; }
+    public int TodayBirthdayMessagesSent { get; set; }
+    public int TodayBirthdayMessagesFailed { get; set; }
+    public int TodayBirthdayOffersRedeemed { get; set; }
+    public decimal TodayBirthdayDiscount { get; set; }
+    public int MonthlyBirthdayOffersRedeemed { get; set; }
+    public decimal MonthlyBirthdayDiscount { get; set; }
 }
 
 public class TopReferrerDto
@@ -172,4 +181,18 @@ public class FileDownload
     public byte[] Content { get; set; } = [];
     public string ContentType { get; set; } = "application/octet-stream";
     public string FileName { get; set; } = "download.bin";
+}
+
+public class BirthdayReportRowDto
+{
+    public int CustomerId { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string MobileNumber { get; set; } = string.Empty;
+    public DateOnly? DateOfBirth { get; set; }
+    public string StoreName { get; set; } = string.Empty;
+    public string? BirthdayOffer { get; set; }
+    public WhatsAppMessageStatus? WhatsAppStatus { get; set; }
+    public bool Redeemed { get; set; }
+    public string? InvoiceNumber { get; set; }
+    public decimal DiscountAmount { get; set; }
 }

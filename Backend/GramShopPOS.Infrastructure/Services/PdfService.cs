@@ -75,6 +75,19 @@ public sealed class PdfService : IPdfService
                             refCol.Item().Text($"Referral Discount Amount: -{bill.ReferralDiscount:0.00}");
                         });
                     }
+                    if (bill.BirthdayDiscount > 0)
+                    {
+                        col.Item().PaddingBottom(8).Column(bday =>
+                        {
+                            bday.Item().Text("Birthday Offer").Bold();
+                            bday.Item().Text($"Birthday Offer: {bill.BirthdayOfferName ?? "Birthday Offer"}");
+                            if (bill.BirthdayDiscountPercent > 0)
+                            {
+                                bday.Item().Text($"Birthday Offer Percentage: {bill.BirthdayDiscountPercent:0.##}%");
+                            }
+                            bday.Item().Text($"Birthday Discount: -{bill.BirthdayDiscount:0.00}");
+                        });
+                    }
                     col.Item().Text($"Sales Person: {bill.SalesPerson?.FullName}");
                     col.Item().Table(table =>
                     {
@@ -112,8 +125,9 @@ public sealed class PdfService : IPdfService
                     }
                     if (bill.BirthdayDiscount > 0)
                     {
+                        var name = string.IsNullOrWhiteSpace(bill.BirthdayOfferName) ? "Birthday Offer" : bill.BirthdayOfferName;
                         var pct = bill.BirthdayDiscountPercent > 0 ? $" ({bill.BirthdayDiscountPercent:0.##}%)" : string.Empty;
-                        col.Item().AlignRight().Text($"Birthday Offer{pct}: -{bill.BirthdayDiscount:0.00}");
+                        col.Item().AlignRight().Text($"{name}{pct}: -{bill.BirthdayDiscount:0.00}");
                     }
                     if (bill.StoreDiscountAmount > 0)
                     {

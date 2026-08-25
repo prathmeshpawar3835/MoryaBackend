@@ -22,7 +22,7 @@ public sealed class DiscountService : IDiscountService
         _audit = audit;
     }
 
-    public async Task<IReadOnlyList<StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, OfferCategory? category = null, CancellationToken cancellationToken = default)
     {
         _currentUser.EnsureAuthenticated();
         var query = _db.StoreDiscounts.AsNoTracking().Where(d => !d.IsDeleted);
@@ -38,9 +38,12 @@ public sealed class DiscountService : IDiscountService
             query = query.Where(d => d.StoreId == storeId.Value);
         }
 
+        query = query.Where(d => d.OfferCategory == (category ?? OfferCategory.Store)
+            || ((category ?? OfferCategory.Store) == OfferCategory.Store && d.OfferCategory == 0));
+
         if (activeOnly)
         {
-            var today = DateTime.UtcNow.Date;
+            var today = BusinessCalendar.Today().ToDateTime(TimeOnly.MinValue);
             query = query.Where(d => d.IsActive &&
                 (d.ValidFrom == null || d.ValidFrom.Value.Date <= today) &&
                 (d.ValidTo == null || d.ValidTo.Value.Date >= today));
@@ -52,6 +55,8 @@ public sealed class DiscountService : IDiscountService
             StoreId = d.StoreId,
             StoreName = d.Store.StoreName,
             Name = d.Name,
+            Description = d.Description,
+            OfferCategory = d.OfferCategory,
             DiscountKind = d.DiscountKind,
             Value = d.Value,
             ValidFrom = d.ValidFrom,
@@ -69,6 +74,8 @@ public sealed class DiscountService : IDiscountService
         {
             StoreId = request.StoreId,
             Name = request.Name.Trim(),
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            OfferCategory = request.OfferCategory == 0 ? OfferCategory.Store : request.OfferCategory,
             DiscountKind = request.DiscountKind,
             Value = Money.Round(request.Value),
             ValidFrom = request.ValidFrom,
@@ -80,7 +87,7 @@ public sealed class DiscountService : IDiscountService
         _db.StoreDiscounts.Add(entity);
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.DiscountCreated, nameof(StoreDiscount), entity.Id.ToString(), null, entity, request.StoreId, cancellationToken);
-        return (await GetAsync(request.StoreId, false, cancellationToken)).First(d => d.Id == entity.Id);
+        return (await GetAsync(request.StoreId, false, entity.OfferCategory, cancellationToken)).First(d => d.Id == entity.Id);
     }
 
     public async Task<StoreDiscountDto> UpdateAsync(int id, StoreDiscountRequest request, CancellationToken cancellationToken = default)
@@ -90,6 +97,8 @@ public sealed class DiscountService : IDiscountService
         var entity = await _db.StoreDiscounts.FirstOrDefaultAsync(d => d.Id == id && !d.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Discount not found.");
         entity.Name = request.Name.Trim();
+        entity.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        entity.OfferCategory = request.OfferCategory == 0 ? entity.OfferCategory : request.OfferCategory;
         entity.DiscountKind = request.DiscountKind;
         entity.Value = Money.Round(request.Value);
         entity.ValidFrom = request.ValidFrom;
@@ -99,7 +108,7 @@ public sealed class DiscountService : IDiscountService
         entity.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.DiscountUpdated, nameof(StoreDiscount), id.ToString(), null, entity, entity.StoreId, cancellationToken);
-        return (await GetAsync(entity.StoreId, false, cancellationToken)).First(d => d.Id == id);
+        return (await GetAsync(entity.StoreId, false, entity.OfferCategory, cancellationToken)).First(d => d.Id == id);
     }
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)

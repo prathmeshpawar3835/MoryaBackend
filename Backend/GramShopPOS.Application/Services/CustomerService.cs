@@ -38,7 +38,7 @@ public sealed class CustomerService : ICustomerService
             query = query.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s));
         }
 
-        var projected = query.OrderBy(c => c.Name).Select(MapExpr);
+        var projected = query.OrderBy(c => c.Name).Select(MapExpr());
         return await projected.ToPagedAsync(request, cancellationToken);
     }
 
@@ -46,7 +46,7 @@ public sealed class CustomerService : ICustomerService
     {
         var dto = await _db.Customers.AsNoTracking()
             .Where(c => c.Id == id && !c.IsDeleted)
-            .Select(MapExpr)
+            .Select(MapExpr())
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundAppException("Customer not found.");
         _currentUser.Access().EnsureStoreAccess(dto.StoreId);
@@ -61,6 +61,8 @@ public sealed class CustomerService : ICustomerService
         {
             throw new ValidationAppException("Name and mobile number are required.");
         }
+
+        BusinessCalendar.EnsureValidDateOfBirth(request.DateOfBirth);
 
         if (await _db.Customers.AnyAsync(c => c.MobileNumber == request.MobileNumber.Trim() && !c.IsDeleted, cancellationToken))
         {
@@ -119,6 +121,8 @@ public sealed class CustomerService : ICustomerService
             throw new ConflictAppException("A customer with this mobile number already exists.");
         }
 
+        BusinessCalendar.EnsureValidDateOfBirth(request.DateOfBirth);
+
         customer.Name = request.Name.Trim();
         customer.MobileNumber = request.MobileNumber.Trim();
         customer.Address = request.Address;
@@ -144,7 +148,7 @@ public sealed class CustomerService : ICustomerService
         return await q.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s))
             .OrderBy(c => c.Name)
             .Take(50)
-            .Select(MapExpr)
+            .Select(MapExpr())
             .ToListAsync(cancellationToken);
     }
 
@@ -164,7 +168,7 @@ public sealed class CustomerService : ICustomerService
             q = q.Where(c => c.StoreId == resolved);
         }
 
-        return await q.Select(MapExpr).FirstOrDefaultAsync(cancellationToken);
+        return await q.Select(MapExpr()).FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<CustomerHistoryDto> GetHistoryAsync(int id, CancellationToken cancellationToken = default)
@@ -414,26 +418,30 @@ public sealed class CustomerService : ICustomerService
         return code;
     }
 
-    private static readonly System.Linq.Expressions.Expression<Func<Customer, CustomerDto>> MapExpr = c => new CustomerDto
+    private static System.Linq.Expressions.Expression<Func<Customer, CustomerDto>> MapExpr()
     {
-        Id = c.Id,
-        StoreId = c.StoreId,
-        StoreName = c.Store.StoreName,
-        Name = c.Name,
-        MobileNumber = c.MobileNumber,
-        Address = c.Address,
-        DateOfBirth = c.DateOfBirth,
-        IsBirthday = c.DateOfBirth != null && c.DateOfBirth.Value.Month == DateTime.UtcNow.Month && c.DateOfBirth.Value.Day == DateTime.UtcNow.Day,
-        ReferralCode = c.ReferralCode,
-        CustomerCode = c.ReferralCode,
-        ReferredByCustomerId = c.ReferredByCustomerId,
-        ReferredByName = c.ReferredByCustomer != null ? c.ReferredByCustomer.Name : null,
-        OutstandingBalance = c.OutstandingBalance,
-        WalletBalance = c.WalletBalance,
-        IsActive = c.IsActive,
-        HasCompletedSale = c.Bills.Any(b => b.BillType == BillType.Sale && b.Status != BillStatus.Cancelled),
-        CreatedDate = c.CreatedDate
-    };
+        var today = BusinessCalendar.Today();
+        return c => new CustomerDto
+        {
+            Id = c.Id,
+            StoreId = c.StoreId,
+            StoreName = c.Store.StoreName,
+            Name = c.Name,
+            MobileNumber = c.MobileNumber,
+            Address = c.Address,
+            DateOfBirth = c.DateOfBirth,
+            IsBirthday = c.DateOfBirth != null && c.DateOfBirth.Value.Month == today.Month && c.DateOfBirth.Value.Day == today.Day,
+            ReferralCode = c.ReferralCode,
+            CustomerCode = c.ReferralCode,
+            ReferredByCustomerId = c.ReferredByCustomerId,
+            ReferredByName = c.ReferredByCustomer != null ? c.ReferredByCustomer.Name : null,
+            OutstandingBalance = c.OutstandingBalance,
+            WalletBalance = c.WalletBalance,
+            IsActive = c.IsActive,
+            HasCompletedSale = c.Bills.Any(b => b.BillType == BillType.Sale && b.Status != BillStatus.Cancelled),
+            CreatedDate = c.CreatedDate
+        };
+    }
 
     private static CustomerDto Map(Customer c) => new()
     {
@@ -444,7 +452,7 @@ public sealed class CustomerService : ICustomerService
         MobileNumber = c.MobileNumber,
         Address = c.Address,
         DateOfBirth = c.DateOfBirth,
-        IsBirthday = c.DateOfBirth is { } d && d.Month == DateTime.UtcNow.Month && d.Day == DateTime.UtcNow.Day,
+        IsBirthday = BusinessCalendar.IsBirthdayToday(c.DateOfBirth),
         ReferralCode = c.ReferralCode,
         CustomerCode = c.ReferralCode,
         ReferredByCustomerId = c.ReferredByCustomerId,

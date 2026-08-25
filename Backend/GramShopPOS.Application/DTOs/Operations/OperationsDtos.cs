@@ -8,6 +8,8 @@ public class StoreDiscountDto
     public int StoreId { get; set; }
     public string StoreName { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public OfferCategory OfferCategory { get; set; } = OfferCategory.Store;
     public DiscountKind DiscountKind { get; set; }
     public decimal Value { get; set; }
     public DateTime? ValidFrom { get; set; }
@@ -19,6 +21,8 @@ public class StoreDiscountRequest
 {
     public int StoreId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public OfferCategory OfferCategory { get; set; } = OfferCategory.Store;
     public DiscountKind DiscountKind { get; set; } = DiscountKind.Percentage;
     public decimal Value { get; set; }
     public DateTime? ValidFrom { get; set; }
@@ -139,4 +143,48 @@ public class ReferralPreviewDto
     public decimal NewCustomerDiscount { get; set; }
     public decimal ReferrerBenefit { get; set; }
     public ReferralValidationDto? Referrer { get; set; }
+}
+
+public class BirthdayOfferSummaryDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public DiscountKind DiscountKind { get; set; }
+    public decimal Value { get; set; }
+    public int StoreId { get; set; }
+    public string StoreName { get; set; } = string.Empty;
+}
+
+public class BirthdayEligibilityDto
+{
+    public int CustomerId { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string MobileNumber { get; set; } = string.Empty;
+    public string CustomerCode { get; set; } = string.Empty;
+    public DateOnly? DateOfBirth { get; set; }
+    public bool IsBirthdayToday { get; set; }
+    public bool AlreadyRedeemed { get; set; }
+    public string? RedeemedInvoiceNumber { get; set; }
+    public string? Message { get; set; }
+    public IReadOnlyList<BirthdayOfferSummaryDto> Offers { get; set; } = [];
+}
+
+public class DailyBirthdayRunResult
+{
+    public int CustomersFound { get; set; }
+    public int MessagesSent { get; set; }
+    public int MessagesFailed { get; set; }
+    public int MessagesSkipped { get; set; }
+}
+
+public sealed record BirthdayDiscountApplication(
+    decimal Amount,
+    decimal Percent,
+    string? Name,
+    int? OfferId,
+    string? Description)
+{
+    public static BirthdayDiscountApplication None { get; } = new(0, 0, null, null, null);
+    public bool Applies => Amount > 0 && OfferId.HasValue;
 }

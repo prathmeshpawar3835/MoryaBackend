@@ -2,6 +2,7 @@ using GramShopPOS.Application.Common;
 using GramShopPOS.Application.DTOs.Operations;
 using GramShopPOS.Application.Interfaces;
 using GramShopPOS.Domain.Constants;
+using GramShopPOS.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,8 +17,8 @@ public sealed class DiscountsController : ControllerBase
     public DiscountsController(IDiscountService discounts) => _discounts = discounts;
 
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] int? storeId, [FromQuery] bool activeOnly, CancellationToken cancellationToken) =>
-        Ok(await _discounts.GetAsync(storeId, activeOnly, cancellationToken));
+    public async Task<IActionResult> Get([FromQuery] int? storeId, [FromQuery] bool activeOnly, [FromQuery] OfferCategory? category, CancellationToken cancellationToken) =>
+        Ok(await _discounts.GetAsync(storeId, activeOnly, category, cancellationToken));
 
     [Authorize(Roles = Roles.Admin)]
     [HttpPost]
@@ -88,4 +89,22 @@ public sealed class RepairsController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateRepairJobRequest request, CancellationToken cancellationToken) =>
         Ok(await _repairs.UpdateAsync(id, request, cancellationToken));
+}
+
+[ApiController]
+[Authorize]
+[Route("api/birthday")]
+public sealed class BirthdayController : ControllerBase
+{
+    private readonly IBirthdayService _birthdays;
+    public BirthdayController(IBirthdayService birthdays) => _birthdays = birthdays;
+
+    [HttpGet("eligibility")]
+    public async Task<IActionResult> Eligibility([FromQuery] int customerId, [FromQuery] int? storeId, CancellationToken cancellationToken) =>
+        Ok(await _birthdays.GetEligibilityAsync(customerId, storeId, cancellationToken));
+
+    [Authorize(Roles = Roles.Admin)]
+    [HttpPost("process-daily")]
+    public async Task<IActionResult> ProcessDaily(CancellationToken cancellationToken) =>
+        Ok(await _birthdays.ProcessDailyAsync(cancellationToken));
 }

@@ -41,6 +41,8 @@ public interface IAppDbContext
     DbSet<RevokedToken> RevokedTokens { get; }
     DbSet<ProductImportBatch> ProductImportBatches { get; }
     DbSet<StoreDiscount> StoreDiscounts { get; }
+    DbSet<BirthdayOfferRedemption> BirthdayOfferRedemptions { get; }
+    DbSet<BirthdayMessageLog> BirthdayMessageLogs { get; }
     DbSet<Supplier> Suppliers { get; }
     DbSet<RepairJob> RepairJobs { get; }
     DbSet<RepairJobHistory> RepairJobHistories { get; }

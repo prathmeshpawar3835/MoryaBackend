@@ -19,6 +19,7 @@ public sealed class BillingService : IBillingService
     private readonly IAuditService _audit;
     private readonly IReferralService _referrals;
     private readonly IReturnDocumentService _returns;
+    private readonly IBirthdayService _birthdays;
 
     public BillingService(
         IAppDbContext db,
@@ -27,7 +28,8 @@ public sealed class BillingService : IBillingService
         IDocumentNumberGenerator numbers,
         IAuditService audit,
         IReferralService referrals,
-        IReturnDocumentService returns)
+        IReturnDocumentService returns,
+        IBirthdayService birthdays)
     {
         _db = db;
         _currentUser = currentUser;
@@ -36,6 +38,7 @@ public sealed class BillingService : IBillingService
         _audit = audit;
         _referrals = referrals;
         _returns = returns;
+        _birthdays = birthdays;
     }
 
     public async Task<BillDto> CreateBillAsync(CreateBillRequest request, CancellationToken cancellationToken = default)
@@ -108,14 +111,15 @@ public sealed class BillingService : IBillingService
             throw new ValidationAppException("Select or create a customer before applying a referral code.");
         }
 
-        var birthdayDiscount = 0m;
-        if (billType == BillType.Sale && customer?.DateOfBirth is { } dob
-            && dob.Month == DateTime.UtcNow.Month && dob.Day == DateTime.UtcNow.Day
-            && settings.BirthdayDiscountPercent > 0)
+        var birthday = billType == BillType.Sale && customer is not null
+            ? await _birthdays.ResolveForSaleAsync(customer, storeId, request.BirthdayOfferId, eligible, cancellationToken)
+            : DTOs.Operations.BirthdayDiscountApplication.None;
+        if (billType == BillType.Sale && customer is null && request.BirthdayOfferId.HasValue)
         {
-            birthdayDiscount = ReferralCalculator.ComputeBenefit(eligible, settings.BirthdayDiscountPercent, RewardType.Percentage);
+            throw new ValidationAppException("Select or create a customer before applying a birthday offer.");
         }
 
+        var birthdayDiscount = birthday.Amount;
         var combinedDiscount = Money.Round(request.BillDiscount + storeDiscountAmount + referralPreview.NewCustomerDiscount + birthdayDiscount);
         var totals = BillCalculator.CalculateTotals(
             lineInputs.Select(l => (l.Qty, l.Rate, l.Discount, l.Tax)).ToList(),
@@ -251,7 +255,9 @@ public sealed class BillingService : IBillingService
             StoreDiscountName = storeDiscount.Name,
             StoreDiscountId = request.StoreDiscountId,
             BirthdayDiscount = birthdayDiscount,
-            BirthdayDiscountPercent = birthdayDiscount > 0 ? settings.BirthdayDiscountPercent : 0,
+            BirthdayDiscountPercent = birthday.Percent,
+            BirthdayOfferId = birthday.OfferId,
+            BirthdayOfferName = birthday.Name,
             ReturnAdjustment = returnAdj,
             ExchangeAdjustment = exchangeAdj,
             BuybackAdjustment = buybackAdj,
@@ -385,6 +391,7 @@ public sealed class BillingService : IBillingService
             if (billType == BillType.Sale)
             {
                 await _referrals.ProcessSaleAsync(customer, bill, request, eligible, referralPreview.NewCustomerDiscount, cancellationToken);
+                await _birthdays.RecordRedemptionAsync(customer, bill, birthday, salesPersonId, cancellationToken);
             }
         }
 
@@ -486,6 +493,7 @@ public sealed class BillingService : IBillingService
         bill.Status = BillStatus.Cancelled;
         bill.UpdatedDate = DateTime.UtcNow;
         bill.Notes = string.IsNullOrWhiteSpace(reason) ? bill.Notes : $"{bill.Notes} | Cancel: {reason}";
+        await _birthdays.ReleaseRedemptionForCancelledBillAsync(bill.Id, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.BillCancelled, nameof(Bill), bill.Id.ToString(), null, new { reason }, bill.StoreId, cancellationToken);
@@ -508,7 +516,8 @@ public sealed class BillingService : IBillingService
             bill.StoreDiscountPercent,
             bill.StoreDiscountName,
             bill.BirthdayDiscount,
-            bill.BirthdayDiscountPercent);
+            bill.BirthdayDiscountPercent,
+            bill.BirthdayOfferName);
         var totalDiscount = InvoiceDiscountComposer.Total(discountLines);
         var otherDiscount = InvoiceDiscountComposer.OtherAmount(
             bill.BillDiscount,
@@ -544,6 +553,7 @@ public sealed class BillingService : IBillingService
             ReferralDiscountPercent = bill.ReferralDiscountPercent,
             BirthdayDiscount = bill.BirthdayDiscount,
             BirthdayDiscountPercent = bill.BirthdayDiscountPercent,
+            BirthdayOfferName = bill.BirthdayOfferName,
             StoreDiscount = bill.StoreDiscountAmount,
             StoreDiscountPercent = bill.StoreDiscountPercent,
             StoreDiscountName = bill.StoreDiscountName,
@@ -755,6 +765,9 @@ public sealed class BillingService : IBillingService
             StoreDiscountName = b.StoreDiscountName,
             Notes = b.Notes,
             BirthdayDiscount = b.BirthdayDiscount,
+            BirthdayDiscountPercent = b.BirthdayDiscountPercent,
+            BirthdayOfferId = b.BirthdayOfferId,
+            BirthdayOfferName = b.BirthdayOfferName,
             ReturnAdjustment = b.ReturnAdjustment,
             ExchangeAdjustment = b.ExchangeAdjustment,
             BuybackAdjustment = b.BuybackAdjustment,
@@ -811,6 +824,11 @@ public sealed class BillingService : IBillingService
 
         var discount = await _db.StoreDiscounts.FirstOrDefaultAsync(d => d.Id == discountId && !d.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Discount not found.");
+        if (discount.OfferCategory == OfferCategory.Birthday)
+        {
+            throw new ValidationAppException("Select birthday offers from the birthday offer control, not as a store discount.");
+        }
+
         if (!discount.IsActive || discount.StoreId != storeId)
         {
             throw new BusinessAppException("The selected discount is not active for this store.");
@@ -910,6 +928,8 @@ public sealed class BillingService : IBillingService
         StoreDiscountName = b.StoreDiscountName ?? b.StoreDiscount?.Name,
         BirthdayDiscount = b.BirthdayDiscount,
         BirthdayDiscountPercent = b.BirthdayDiscountPercent,
+        BirthdayOfferId = b.BirthdayOfferId,
+        BirthdayOfferName = b.BirthdayOfferName,
         ReturnAdjustment = b.ReturnAdjustment,
         ExchangeAdjustment = b.ExchangeAdjustment,
         BuybackAdjustment = b.BuybackAdjustment,

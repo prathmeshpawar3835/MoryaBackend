@@ -107,6 +107,7 @@ public sealed class BillConfiguration : IEntityTypeConfiguration<Bill>
         builder.Property(x => x.StoreDiscountName).HasMaxLength(200);
         builder.Property(x => x.BirthdayDiscount).Money();
         builder.Property(x => x.BirthdayDiscountPercent).HasPrecision(5, 2);
+        builder.Property(x => x.BirthdayOfferName).HasMaxLength(200);
         builder.Property(x => x.ReturnAdjustment).Money();
         builder.Property(x => x.ExchangeAdjustment).Money();
         builder.Property(x => x.BuybackAdjustment).Money();
@@ -116,6 +117,7 @@ public sealed class BillConfiguration : IEntityTypeConfiguration<Bill>
         builder.HasOne(x => x.Customer).WithMany(x => x.Bills).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SalesPerson).WithMany().HasForeignKey(x => x.SalesPersonId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.StoreDiscount).WithMany().HasForeignKey(x => x.StoreDiscountId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.BirthdayOffer).WithMany().HasForeignKey(x => x.BirthdayOfferId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ReferrerCustomer).WithMany().HasForeignKey(x => x.ReferrerCustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ExchangeOfBill).WithMany().HasForeignKey(x => x.ExchangeOfBillId).OnDelete(DeleteBehavior.Restrict);
         builder.ToTable(t => t.HasCheckConstraint("CK_Bills_GrandTotal", "[GrandTotal] >= 0"));

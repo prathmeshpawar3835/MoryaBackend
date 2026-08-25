@@ -161,5 +161,37 @@ public sealed class DatabaseSeeder
                 new TaxSetting { Name = "GST 5%", Percent = 5, IsDefault = false, IsActive = true, CreatedDate = DateTime.UtcNow });
             await _db.SaveChangesAsync(cancellationToken);
         }
+
+        var birthdayPercent = (await _db.BusinessSettings.FirstAsync(cancellationToken)).BirthdayDiscountPercent;
+        if (birthdayPercent <= 0)
+        {
+            birthdayPercent = 10;
+        }
+
+        var stores = await _db.Stores.Where(s => s.IsActive && !s.IsDeleted).ToListAsync(cancellationToken);
+        foreach (var store in stores)
+        {
+            var exists = await _db.StoreDiscounts.AnyAsync(
+                d => d.StoreId == store.Id && d.OfferCategory == OfferCategory.Birthday && !d.IsDeleted,
+                cancellationToken);
+            if (exists)
+            {
+                continue;
+            }
+
+            _db.StoreDiscounts.Add(new StoreDiscount
+            {
+                StoreId = store.Id,
+                Name = "Birthday Special Offer",
+                Description = "Valid only on your birthday",
+                OfferCategory = OfferCategory.Birthday,
+                DiscountKind = DiscountKind.Percentage,
+                Value = birthdayPercent,
+                IsActive = true,
+                CreatedDate = DateTime.UtcNow
+            });
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
     }
 }

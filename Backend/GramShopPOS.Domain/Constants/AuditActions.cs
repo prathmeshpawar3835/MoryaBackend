@@ -45,4 +45,7 @@ public static class AuditActions
     public const string SupplierUpdated = "SupplierUpdated";
     public const string RepairJobCreated = "RepairJobCreated";
     public const string RepairJobUpdated = "RepairJobUpdated";
+    public const string BirthdayOfferRedeemed = "BirthdayOfferRedeemed";
+    public const string BirthdayWhatsAppSent = "BirthdayWhatsAppSent";
+    public const string BirthdayWhatsAppFailed = "BirthdayWhatsAppFailed";
 }

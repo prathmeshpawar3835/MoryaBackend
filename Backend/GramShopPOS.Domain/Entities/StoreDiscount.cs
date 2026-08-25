@@ -6,6 +6,8 @@ public class StoreDiscount : BaseEntity
 {
     public int StoreId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public OfferCategory OfferCategory { get; set; } = OfferCategory.Store;
     public DiscountKind DiscountKind { get; set; } = DiscountKind.Percentage;
     public decimal Value { get; set; }
     public DateTime? ValidFrom { get; set; }
