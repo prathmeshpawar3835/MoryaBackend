@@ -151,6 +151,7 @@ public class ProfitReportRowDto
 public class ReportRequest : Common.PagedRequest
 {
     public string Period { get; set; } = "custom";
+    public int? SalesPersonId { get; set; }
 }
 
 public class FileDownload

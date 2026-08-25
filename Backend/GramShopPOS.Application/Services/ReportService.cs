@@ -46,7 +46,9 @@ public sealed class ReportService : IReportService
             PaidAmount = b.PaidAmount,
             DueAmount = b.DueAmount,
             Status = b.Status,
-            CustomerName = b.Customer != null ? b.Customer.Name : null
+            CustomerName = b.Customer != null ? b.Customer.Name : null,
+            SalesPersonId = b.SalesPersonId,
+            SalesPersonName = b.SalesPerson != null ? b.SalesPerson.FullName : string.Empty
         }).ToPagedAsync(request, cancellationToken);
 
         var ids = page.Items.Select(x => x.Id).ToList();
@@ -278,7 +280,13 @@ public sealed class ReportService : IReportService
         ApplyPeriod(request);
         var (from, to) = Range(request);
         var query = _db.Bills.AsNoTracking().Where(b => b.Status != BillStatus.Cancelled && b.BillDate >= from && b.BillDate < to);
-        return FilterStore(query, b => b.StoreId, request.StoreId);
+        query = FilterStore(query, b => b.StoreId, request.StoreId);
+        if (request.SalesPersonId.HasValue)
+        {
+            query = query.Where(b => b.SalesPersonId == request.SalesPersonId.Value);
+        }
+
+        return query;
     }
 
     private IQueryable<T> FilterStore<T>(IQueryable<T> query, System.Linq.Expressions.Expression<Func<T, int>> storeSelector, int? storeId)
