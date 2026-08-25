@@ -11,6 +11,9 @@ public class CustomerDto
     public string MobileNumber { get; set; } = string.Empty;
     public string? Address { get; set; }
     public string ReferralCode { get; set; } = string.Empty;
+    public string CustomerCode { get; set; } = string.Empty;
+    public int? ReferredByCustomerId { get; set; }
+    public string? ReferredByName { get; set; }
     public decimal OutstandingBalance { get; set; }
     public decimal WalletBalance { get; set; }
     public bool IsActive { get; set; }
@@ -96,6 +99,10 @@ public class ReferralDto
     public int ReferredCustomerId { get; set; }
     public string ReferredName { get; set; } = string.Empty;
     public decimal RewardAmount { get; set; }
+    public decimal SaleAmount { get; set; }
+    public decimal DiscountGiven { get; set; }
+    public string ReferralCode { get; set; } = string.Empty;
+    public string? BillNumber { get; set; }
     public ReferralRewardStatus Status { get; set; }
     public DateTime ReferralDate { get; set; }
 }

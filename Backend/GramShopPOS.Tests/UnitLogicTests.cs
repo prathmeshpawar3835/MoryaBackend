@@ -2,6 +2,7 @@ using FluentAssertions;
 using GramShopPOS.Application.Exceptions;
 using GramShopPOS.Application.Services;
 using GramShopPOS.Domain.Constants;
+using GramShopPOS.Domain.Enums;
 
 namespace GramShopPOS.Tests;
 
@@ -31,6 +32,23 @@ public class BillCalculatorTests
         act.Should().Throw<InvalidOperationException>();
         var ok = () => BillCalculator.ValidatePayments(5000, 0, [2000, 2000], 1000);
         ok.Should().NotThrow();
+    }
+}
+
+public class ReferralCalculatorTests
+{
+    [Fact]
+    public void Percentage_benefit_matches_business_example()
+    {
+        ReferralCalculator.ComputeBenefit(10000, 10, RewardType.Percentage).Should().Be(1000);
+        ReferralCalculator.ComputeBenefit(10000, 5, RewardType.Percentage).Should().Be(500);
+    }
+
+    [Fact]
+    public void Return_reduces_referrer_benefit_proportionally()
+    {
+        ReferralCalculator.RemainingBenefit(500, 10000, 6000).Should().Be(300);
+        ReferralCalculator.RemainingBenefit(500, 10000, 0).Should().Be(0);
     }
 }
 

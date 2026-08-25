@@ -28,6 +28,7 @@ public interface IUserService
     Task<UserDto> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<UserDto> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken = default);
     Task<UserDto> UpdateAsync(int id, UpdateUserRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DTOs.Operations.SalesPersonOptionDto>> GetSalesPersonsAsync(int storeId, CancellationToken cancellationToken = default);
 }
 
 public interface IStoreService
@@ -106,6 +107,7 @@ public interface ICustomerService
 {
     Task<PagedResponse<CustomerDto>> GetAsync(PagedRequest request, CancellationToken cancellationToken = default);
     Task<CustomerDto> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<CustomerDto?> GetByMobileAsync(string mobile, int? storeId, CancellationToken cancellationToken = default);
     Task<CustomerDto> CreateAsync(CreateCustomerRequest request, CancellationToken cancellationToken = default);
     Task<CustomerDto> UpdateAsync(int id, UpdateCustomerRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CustomerDto>> SearchAsync(string query, int? storeId, CancellationToken cancellationToken = default);
@@ -120,6 +122,34 @@ public interface ICustomerService
 public interface IReferralService
 {
     Task<PagedResponse<ReferralDto>> GetAsync(PagedRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.ReferralValidationDto> ValidateCodeAsync(string code, int? excludeCustomerId, int? storeId, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.ReferralPreviewDto> PreviewAsync(Domain.Entities.Customer? customer, string? referralCode, string? referringMobile, decimal eligibleAmount, int storeId, CancellationToken cancellationToken = default);
+    Task ProcessSaleAsync(Domain.Entities.Customer customer, Domain.Entities.Bill bill, CreateBillRequest request, decimal eligibleAmount, decimal referralDiscount, CancellationToken cancellationToken = default);
+    Task AdjustForReturnAsync(Domain.Entities.Bill originalBill, Domain.Entities.ProductReturn ret, CancellationToken cancellationToken = default);
+}
+
+public interface IDiscountService
+{
+    Task<IReadOnlyList<DTOs.Operations.StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.StoreDiscountDto> CreateAsync(DTOs.Operations.StoreDiscountRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.StoreDiscountDto> UpdateAsync(int id, DTOs.Operations.StoreDiscountRequest request, CancellationToken cancellationToken = default);
+    Task DeleteAsync(int id, CancellationToken cancellationToken = default);
+}
+
+public interface ISupplierService
+{
+    Task<PagedResponse<DTOs.Operations.SupplierDto>> GetAsync(PagedRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.SupplierDto> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.SupplierDto> CreateAsync(DTOs.Operations.SupplierRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.SupplierDto> UpdateAsync(int id, DTOs.Operations.SupplierRequest request, CancellationToken cancellationToken = default);
+}
+
+public interface IRepairService
+{
+    Task<PagedResponse<DTOs.Operations.RepairJobDto>> GetAsync(PagedRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.RepairJobDto> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.RepairJobDto> CreateAsync(DTOs.Operations.CreateRepairJobRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.RepairJobDto> UpdateAsync(int id, DTOs.Operations.UpdateRepairJobRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface IDashboardService

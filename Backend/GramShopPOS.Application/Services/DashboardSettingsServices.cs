@@ -36,22 +36,46 @@ public sealed class DashboardService : IDashboardService
         }
 
         var start = DateTime.UtcNow.Date;
-        var todayBills = bills.Where(b => b.BillDate >= start);
+        var monthStart = new DateTime(start.Year, start.Month, 1);
+        var todayBills = bills.Where(b => b.BillDate >= start && b.BillType == BillType.Sale);
+        var monthBills = bills.Where(b => b.BillDate >= monthStart && b.BillType == BillType.Sale);
         var sales = await todayBills.SumAsync(b => (decimal?)b.GrandTotal, cancellationToken) ?? 0;
         var count = await todayBills.CountAsync(cancellationToken);
         var customers = await todayBills.Select(b => b.CustomerId).Distinct().CountAsync(cancellationToken);
         var dues = await bills.SumAsync(b => (decimal?)b.DueAmount, cancellationToken) ?? 0;
+        var monthlySales = await monthBills.SumAsync(b => (decimal?)b.GrandTotal, cancellationToken) ?? 0;
+        var monthlyBills = await monthBills.CountAsync(cancellationToken);
+        var avgBill = monthlyBills == 0 ? 0 : Money.Round(monthlySales / monthlyBills);
 
-        var inventory = _db.Inventories.AsNoTracking().Where(i => !i.IsDeleted && i.Quantity <= i.Product.MinimumStockLevel);
+        var returnsQuery = _db.Returns.AsNoTracking().AsQueryable();
+        if (!_currentUser.IsAdmin)
+        {
+            var ids = _currentUser.AssignedStoreIds;
+            returnsQuery = returnsQuery.Where(r => ids.Contains(r.StoreId));
+        }
+
         if (storeId.HasValue)
         {
-            inventory = inventory.Where(i => i.StoreId == storeId.Value);
+            returnsQuery = returnsQuery.Where(r => r.StoreId == storeId.Value);
+        }
+
+        var todayReturns = returnsQuery.Where(r => r.ReturnDate >= start && r.ReturnKind == ReturnKind.Return);
+        var monthReturns = returnsQuery.Where(r => r.ReturnDate >= monthStart && r.ReturnKind == ReturnKind.Return);
+        var todayExchanges = returnsQuery.Where(r => r.ReturnDate >= start && r.ReturnKind == ReturnKind.Exchange);
+        var monthExchanges = returnsQuery.Where(r => r.ReturnDate >= monthStart && r.ReturnKind == ReturnKind.Exchange);
+
+        var inventoryBase = _db.Inventories.AsNoTracking().Where(i => !i.IsDeleted);
+        if (storeId.HasValue)
+        {
+            inventoryBase = inventoryBase.Where(i => i.StoreId == storeId.Value);
         }
         else if (!_currentUser.IsAdmin)
         {
             var ids = _currentUser.AssignedStoreIds;
-            inventory = inventory.Where(i => ids.Contains(i.StoreId));
+            inventoryBase = inventoryBase.Where(i => ids.Contains(i.StoreId));
         }
+
+        var inventory = inventoryBase.Where(i => i.Quantity <= i.Product.MinimumStockLevel);
 
         var lowStock = await inventory.Take(10).Select(i => new InventoryDto
         {
@@ -106,17 +130,131 @@ public sealed class DashboardService : IDashboardService
             .OrderBy(x => x.Date)
             .ToListAsync(cancellationToken);
 
+        var custQuery = _db.Customers.AsNoTracking().Where(c => !c.IsDeleted);
+        if (storeId.HasValue)
+        {
+            custQuery = custQuery.Where(c => c.StoreId == storeId.Value);
+        }
+        else if (!_currentUser.IsAdmin)
+        {
+            var ids = _currentUser.AssignedStoreIds;
+            custQuery = custQuery.Where(c => ids.Contains(c.StoreId));
+        }
+
+        var totalCustomers = await custQuery.CountAsync(cancellationToken);
+        var purchasingCustomers = await bills.Where(b => b.CustomerId != null).Select(b => b.CustomerId).Distinct().CountAsync(cancellationToken);
+        var purchaseRatio = totalCustomers == 0 ? 0 : Money.Round((decimal)purchasingCustomers / totalCustomers);
+
+        var refQuery = _db.Referrals.AsNoTracking().AsQueryable();
+        if (storeId.HasValue)
+        {
+            refQuery = refQuery.Where(r => r.StoreId == storeId.Value);
+        }
+        else if (!_currentUser.IsAdmin)
+        {
+            var ids = _currentUser.AssignedStoreIds;
+            refQuery = refQuery.Where(r => ids.Contains(r.StoreId));
+        }
+
+        var todayRefs = refQuery.Where(r => r.ReferralDate >= start);
+        var monthRefs = refQuery.Where(r => r.ReferralDate >= monthStart);
+        var rewardQuery = _db.ReferralRewards.AsNoTracking().Where(r => r.IsReferrerReward);
+        if (storeId.HasValue)
+        {
+            rewardQuery = rewardQuery.Where(r => r.Referral.StoreId == storeId.Value);
+        }
+
+        var slow = await _db.BillItems.AsNoTracking()
+            .Where(i => i.Bill.Status != BillStatus.Cancelled && i.Bill.BillDate >= from && (storeId == null || i.Bill.StoreId == storeId))
+            .GroupBy(i => new { i.ProductId, i.ProductCode, i.ProductName })
+            .Select(g => new ProductSalesRowDto
+            {
+                ProductId = g.Key.ProductId,
+                ProductCode = g.Key.ProductCode,
+                ProductName = g.Key.ProductName,
+                QuantitySold = g.Sum(x => x.Quantity),
+                Revenue = g.Sum(x => x.Total)
+            })
+            .OrderBy(x => x.QuantitySold)
+            .Take(5)
+            .ToListAsync(cancellationToken);
+
+        var topReferrers = await monthRefs
+            .GroupBy(r => new { r.ReferrerCustomerId, r.ReferrerCustomer.Name, r.ReferrerCustomer.ReferralCode })
+            .Select(g => new TopReferrerDto
+            {
+                CustomerId = g.Key.ReferrerCustomerId,
+                CustomerName = g.Key.Name,
+                CustomerCode = g.Key.ReferralCode,
+                ReferralCount = g.Count(),
+                ReferralSales = g.Sum(x => x.SaleAmount),
+                BenefitEarned = g.Sum(x => x.RewardAmount)
+            })
+            .OrderByDescending(x => x.BenefitEarned)
+            .Take(5)
+            .ToListAsync(cancellationToken);
+
+        var referralChart = await monthRefs
+            .GroupBy(r => r.ReferralDate.Date)
+            .Select(g => new SalesChartPointDto { Date = g.Key, Sales = g.Sum(x => x.SaleAmount), BillCount = g.Count() })
+            .OrderBy(x => x.Date)
+            .ToListAsync(cancellationToken);
+
+        var erChart = await returnsQuery.Where(r => r.ReturnDate >= from)
+            .GroupBy(r => r.ReturnDate.Date)
+            .Select(g => new ExchangeReturnChartPointDto
+            {
+                Date = g.Key,
+                ReturnAmount = g.Where(x => x.ReturnKind == ReturnKind.Return).Sum(x => x.ReturnAmount),
+                ExchangeAmount = g.Where(x => x.ReturnKind == ReturnKind.Exchange).Sum(x => x.ReturnAmount),
+                ReturnCount = g.Count(x => x.ReturnKind == ReturnKind.Return),
+                ExchangeCount = g.Count(x => x.ReturnKind == ReturnKind.Exchange)
+            })
+            .OrderBy(x => x.Date)
+            .ToListAsync(cancellationToken);
+
         return new DashboardDto
         {
             TodaySales = sales,
             TodayBills = count,
             TodayCustomers = customers,
             PendingDues = dues,
+            MonthlySales = monthlySales,
+            MonthlyBills = monthlyBills,
+            TodayReturns = await todayReturns.SumAsync(r => (decimal?)r.ReturnAmount, cancellationToken) ?? 0,
+            TodayReturnCount = await todayReturns.CountAsync(cancellationToken),
+            MonthlyReturns = await monthReturns.SumAsync(r => (decimal?)r.ReturnAmount, cancellationToken) ?? 0,
+            MonthlyReturnCount = await monthReturns.CountAsync(cancellationToken),
+            TodayExchanges = await todayExchanges.SumAsync(r => (decimal?)r.ReturnAmount, cancellationToken) ?? 0,
+            TodayExchangeCount = await todayExchanges.CountAsync(cancellationToken),
+            MonthlyExchanges = await monthExchanges.SumAsync(r => (decimal?)r.ReturnAmount, cancellationToken) ?? 0,
+            MonthlyExchangeCount = await monthExchanges.CountAsync(cancellationToken),
+            TotalCustomers = totalCustomers,
+            PurchasingCustomers = purchasingCustomers,
+            CustomerPurchaseRatio = purchaseRatio,
+            AverageBillValue = avgBill,
+            TodayReferralCount = await todayRefs.CountAsync(cancellationToken),
+            TodayReferralSales = await todayRefs.SumAsync(r => (decimal?)r.SaleAmount, cancellationToken) ?? 0,
+            TodayReferralDiscount = await todayRefs.SumAsync(r => (decimal?)r.DiscountGiven, cancellationToken) ?? 0,
+            TodayReferralCost = await rewardQuery.Where(r => r.CreatedDate >= start && r.IsReferrerReward && !r.IsReversal).SumAsync(r => (decimal?)r.Amount, cancellationToken) ?? 0,
+            MonthlyReferralCount = await monthRefs.CountAsync(cancellationToken),
+            MonthlyReferralSales = await monthRefs.SumAsync(r => (decimal?)r.SaleAmount, cancellationToken) ?? 0,
+            MonthlyReferralDiscount = await monthRefs.SumAsync(r => (decimal?)r.DiscountGiven, cancellationToken) ?? 0,
+            MonthlyReferralCost = await rewardQuery.Where(r => r.CreatedDate >= monthStart && r.IsReferrerReward && !r.IsReversal).SumAsync(r => (decimal?)r.Amount, cancellationToken) ?? 0,
+            TotalReferralCost = await rewardQuery.Where(r => r.IsReferrerReward && !r.IsReversal).SumAsync(r => (decimal?)r.Amount, cancellationToken) ?? 0,
+            TotalInventoryProducts = await inventoryBase.Select(i => i.ProductId).Distinct().CountAsync(cancellationToken),
+            TotalInventoryQuantity = await inventoryBase.SumAsync(i => (decimal?)i.Quantity, cancellationToken) ?? 0,
+            LowStockCount = await inventory.CountAsync(cancellationToken),
+            OutOfStockCount = await inventoryBase.CountAsync(i => i.Quantity <= 0, cancellationToken),
+            TopReferrers = topReferrers,
             LowStockProducts = lowStock,
             TopSellingProducts = top,
+            SlowMovingProducts = slow,
             RecentBills = recent,
             PaymentModeSummary = payments,
-            SalesChartData = chart
+            SalesChartData = chart,
+            ReferralChartData = referralChart,
+            ExchangeReturnChart = erChart
         };
     }
 }

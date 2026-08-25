@@ -34,8 +34,11 @@ public class IntegrationTests
         return new ProductService(fx.Db, fx.User, new AuditService(fx.Db, fx.User), new StockEngine(fx.Db), excel.Object);
     }
 
+    private static ReferralService Referrals(SqliteFixture fx) =>
+        new(fx.Db, fx.User, new AuditService(fx.Db, fx.User));
+
     private static BillingService Billing(SqliteFixture fx) =>
-        new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User));
+        new(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), Referrals(fx));
 
     [Fact]
     public async Task Admin_and_salesperson_can_login()
@@ -178,7 +181,7 @@ public class IntegrationTests
             Items = [new CreateBillItemRequest { ProductId = productId, Quantity = 1 }],
             Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5150 }]
         });
-        var returns = new ReturnService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), billing, new AuditService(fx.Db, fx.User));
+        var returns = new ReturnService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), billing, new AuditService(fx.Db, fx.User), Referrals(fx));
         var ret = await returns.CreateReturnAsync(new CreateReturnRequest
         {
             OriginalBillId = bill.Id,

@@ -106,7 +106,8 @@ public sealed class ReportService : IReportService
             Quantity = i.Quantity,
             PurchaseValue = _currentUser.IsAdmin ? i.Quantity * i.Product.PurchasePrice : 0,
             SellingValue = i.Quantity * i.Product.SellingPrice,
-            IsLowStock = i.Quantity <= i.Product.MinimumStockLevel
+            IsLowStock = i.Quantity <= i.Product.MinimumStockLevel,
+            IsOutOfStock = i.Quantity <= 0
         });
         return await projected.ToPagedAsync(request, cancellationToken);
     }
@@ -127,6 +128,7 @@ public sealed class ReportService : IReportService
             Id = p.Id,
             StoreId = p.StoreId,
             StoreCode = p.Store.StoreCode,
+            SupplierId = p.SupplierId,
             SupplierName = p.SupplierName,
             InvoiceNumber = p.InvoiceNumber,
             PurchaseDate = p.PurchaseDate,
@@ -183,12 +185,15 @@ public sealed class ReportService : IReportService
         var (from, to) = Range(request);
         var query = _db.Referrals.AsNoTracking().Where(r => r.ReferralDate >= from && r.ReferralDate < to);
         query = FilterStore(query, r => r.StoreId, request.StoreId);
-        var grouped = query.GroupBy(r => new { r.ReferrerCustomerId, r.ReferrerCustomer.Name })
+        var grouped = query.GroupBy(r => new { r.ReferrerCustomerId, r.ReferrerCustomer.Name, r.ReferrerCustomer.ReferralCode })
             .Select(g => new ReferralReportRowDto
             {
                 ReferrerCustomerId = g.Key.ReferrerCustomerId,
                 ReferrerName = g.Key.Name,
+                ReferrerCode = g.Key.ReferralCode,
                 ReferralCount = g.Count(),
+                ReferralSales = g.Sum(x => x.SaleAmount),
+                DiscountGiven = g.Sum(x => x.DiscountGiven),
                 PendingRewards = g.Where(x => x.Status == ReferralRewardStatus.Pending).Sum(x => x.RewardAmount),
                 CreditedRewards = g.Where(x => x.Status == ReferralRewardStatus.Credited).Sum(x => x.RewardAmount),
                 RedeemedRewards = g.SelectMany(x => x.Rewards).Where(x => x.Status == ReferralRewardStatus.Redeemed).Sum(x => x.Amount)

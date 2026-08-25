@@ -79,6 +79,7 @@ public class PurchaseDto
     public int Id { get; set; }
     public int StoreId { get; set; }
     public string StoreCode { get; set; } = string.Empty;
+    public int? SupplierId { get; set; }
     public string SupplierName { get; set; } = string.Empty;
     public string InvoiceNumber { get; set; } = string.Empty;
     public DateTime PurchaseDate { get; set; }
@@ -100,6 +101,7 @@ public class PurchaseItemDto
 public class CreatePurchaseRequest
 {
     public int StoreId { get; set; }
+    public int? SupplierId { get; set; }
     public string SupplierName { get; set; } = string.Empty;
     public string InvoiceNumber { get; set; } = string.Empty;
     public DateTime? Date { get; set; }

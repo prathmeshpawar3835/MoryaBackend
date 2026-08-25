@@ -21,6 +21,11 @@ public sealed class UsersController : ControllerBase
     public async Task<IActionResult> Get([FromQuery] PagedRequest request, CancellationToken cancellationToken) =>
         Ok(await _users.GetAsync(request, cancellationToken));
 
+    [HttpGet("sales-persons")]
+    [Authorize]
+    public async Task<IActionResult> SalesPersons([FromQuery] int storeId, CancellationToken cancellationToken) =>
+        Ok(await _users.GetSalesPersonsAsync(storeId, cancellationToken));
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken) =>
         Ok(await _users.GetByIdAsync(id, cancellationToken));

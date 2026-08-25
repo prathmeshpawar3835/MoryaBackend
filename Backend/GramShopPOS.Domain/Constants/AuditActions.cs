@@ -37,4 +37,11 @@ public static class AuditActions
     public const string ProductImported = "ProductImported";
     public const string CustomerCreated = "CustomerCreated";
     public const string CustomerUpdated = "CustomerUpdated";
+    public const string ReferralReversal = "ReferralReversal";
+    public const string DiscountCreated = "DiscountCreated";
+    public const string DiscountUpdated = "DiscountUpdated";
+    public const string SupplierCreated = "SupplierCreated";
+    public const string SupplierUpdated = "SupplierUpdated";
+    public const string RepairJobCreated = "RepairJobCreated";
+    public const string RepairJobUpdated = "RepairJobUpdated";
 }

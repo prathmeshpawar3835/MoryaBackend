@@ -14,6 +14,7 @@ public class ProductReturn : BaseEntity
     public string? Reason { get; set; }
     public ReturnKind ReturnKind { get; set; } = ReturnKind.Return;
     public int UserId { get; set; }
+    public int? SalesPersonId { get; set; }
     public int? ExchangeBillId { get; set; }
 
     public Store Store { get; set; } = null!;
@@ -21,5 +22,6 @@ public class ProductReturn : BaseEntity
     public Bill? ExchangeBill { get; set; }
     public Customer? Customer { get; set; }
     public ApplicationUser User { get; set; } = null!;
+    public ApplicationUser? SalesPerson { get; set; }
     public ICollection<ReturnItem> Items { get; set; } = new List<ReturnItem>();
 }

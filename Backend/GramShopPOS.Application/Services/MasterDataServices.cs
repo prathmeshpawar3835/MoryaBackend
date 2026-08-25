@@ -132,6 +132,9 @@ public sealed class UserService : IUserService
         return await MapAsync(user.Id, cancellationToken);
     }
 
+    public Task<IReadOnlyList<DTOs.Operations.SalesPersonOptionDto>> GetSalesPersonsAsync(int storeId, CancellationToken cancellationToken = default) =>
+        StaffResolver.ListAsync(_db, _currentUser, storeId, cancellationToken);
+
     private async Task AssignStoresAsync(int userId, IReadOnlyList<int> storeIds, CancellationToken cancellationToken)
     {
         var unique = storeIds.Distinct().ToList();

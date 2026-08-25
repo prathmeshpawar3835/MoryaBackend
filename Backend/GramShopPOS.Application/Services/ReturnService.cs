@@ -17,6 +17,7 @@ public sealed class ReturnService : IReturnService
     private readonly IDocumentNumberGenerator _numbers;
     private readonly IBillingService _billing;
     private readonly IAuditService _audit;
+    private readonly IReferralService _referrals;
 
     public ReturnService(
         IAppDbContext db,
@@ -24,7 +25,8 @@ public sealed class ReturnService : IReturnService
         IStockEngine stock,
         IDocumentNumberGenerator numbers,
         IBillingService billing,
-        IAuditService audit)
+        IAuditService audit,
+        IReferralService referrals)
     {
         _db = db;
         _currentUser = currentUser;
@@ -32,6 +34,7 @@ public sealed class ReturnService : IReturnService
         _numbers = numbers;
         _billing = billing;
         _audit = audit;
+        _referrals = referrals;
     }
 
     public async Task<ReturnDto> CreateReturnAsync(CreateReturnRequest request, CancellationToken cancellationToken = default)
@@ -52,10 +55,12 @@ public sealed class ReturnService : IReturnService
         {
             OriginalBillId = request.OriginalBillId,
             Reason = request.Reason,
+            SalesPersonId = request.SalesPersonId,
             Items = request.ReturnItems
         }, ReturnKind.Exchange, null, cancellationToken);
 
         var original = await _db.Bills.FirstAsync(b => b.Id == request.OriginalBillId, cancellationToken);
+        var salesPersonId = await StaffResolver.ResolveSalesPersonIdAsync(_db, _currentUser, original.StoreId, request.SalesPersonId, cancellationToken);
         var billing = (BillingService)_billing;
         var newBill = await billing.CreateBillCoreAsync(new CreateBillRequest
         {
@@ -63,6 +68,7 @@ public sealed class ReturnService : IReturnService
             CustomerId = original.CustomerId,
             BillDiscount = request.BillDiscount,
             WalletRedeemAmount = request.WalletRedeemAmount,
+            SalesPersonId = salesPersonId,
             Items = request.NewItems,
             Payments = request.Payments
         }, original.StoreId, BillType.Exchange, original.Id, cancellationToken);
@@ -150,7 +156,7 @@ public sealed class ReturnService : IReturnService
         }
 
         var settings = await _db.BusinessSettings.FirstAsync(cancellationToken);
-        var store = await _db.Stores.FirstAsync(s => s.Id == bill.StoreId, cancellationToken);
+        var salesPersonId = await StaffResolver.ResolveSalesPersonIdAsync(_db, _currentUser, bill.StoreId, request.SalesPersonId, cancellationToken);
         var returnNumber = await _numbers.NextReturnNumberAsync(bill.StoreId, "CN", settings.FinancialYearStartMonth, cancellationToken);
 
         var ret = new ProductReturn
@@ -164,6 +170,7 @@ public sealed class ReturnService : IReturnService
             Reason = request.Reason,
             ReturnKind = kind,
             UserId = _currentUser.UserId,
+            SalesPersonId = salesPersonId,
             ExchangeBillId = exchangeBillId,
             CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId,
@@ -235,6 +242,7 @@ public sealed class ReturnService : IReturnService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _referrals.AdjustForReturnAsync(bill, ret, cancellationToken);
         return Map(ret);
     }
 
@@ -251,8 +259,10 @@ public sealed class ReturnService : IReturnService
         Reason = r.Reason,
         ReturnKind = r.ReturnKind,
         ExchangeBillId = r.ExchangeBillId,
+        SalesPersonId = r.SalesPersonId,
         Items = r.Items?.Select(i => new ReturnItemDto
         {
+            OriginalBillItemId = i.OriginalBillItemId,
             ProductId = i.ProductId,
             ProductCode = i.ProductCode,
             ProductName = i.ProductName,

@@ -149,9 +149,9 @@ public sealed class DatabaseSeeder
                 DefaultTaxPercent = 3,
                 LowStockDefaultLevel = 2,
                 ReferralEnabled = true,
-                NewCustomerReward = 50,
-                ReferrerReward = 100,
-                RewardType = RewardType.FixedAmount,
+                NewCustomerReward = 10,
+                ReferrerReward = 5,
+                RewardType = RewardType.Percentage,
                 RewardTrigger = RewardTrigger.FirstPurchase,
                 IsActive = true,
                 CreatedDate = DateTime.UtcNow

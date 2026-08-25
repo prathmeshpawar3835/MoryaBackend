@@ -21,7 +21,7 @@ public class ConcurrencyTests
         {
             await using var db = fx.CreateContext();
             var user = new TestCurrentUser { UserId = fx.User.UserId, Role = fx.User.Role, AssignedStoreIds = [1] };
-            var billing = new BillingService(db, user, new StockEngine(db), new DocumentNumberGenerator(db), new AuditService(db, user));
+            var billing = new BillingService(db, user, new StockEngine(db), new DocumentNumberGenerator(db), new AuditService(db, user), new ReferralService(db, user, new AuditService(db, user)));
             var bill = await billing.CreateBillAsync(new CreateBillRequest
             {
                 StoreId = 1,
@@ -53,7 +53,7 @@ public class ConcurrencyTests
             {
                 await using var db = fx.CreateContext();
                 var user = new TestCurrentUser { UserId = fx.User.UserId, Role = fx.User.Role, AssignedStoreIds = [1] };
-                var billing = new BillingService(db, user, new StockEngine(db), new DocumentNumberGenerator(db), new AuditService(db, user));
+                var billing = new BillingService(db, user, new StockEngine(db), new DocumentNumberGenerator(db), new AuditService(db, user), new ReferralService(db, user, new AuditService(db, user)));
                 await billing.CreateBillAsync(new CreateBillRequest
                 {
                     StoreId = 1,

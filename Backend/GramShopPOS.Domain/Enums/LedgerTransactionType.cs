@@ -7,5 +7,8 @@ public enum LedgerTransactionType
     Credit = 3,
     PaymentReceived = 4,
     WalletCredit = 5,
-    WalletRedeem = 6
+    WalletRedeem = 6,
+    ReferralCredit = 7,
+    ReferralReversal = 8,
+    ExchangeAdjustment = 9
 }

@@ -17,19 +17,22 @@ public sealed class BillingService : IBillingService
     private readonly IStockEngine _stock;
     private readonly IDocumentNumberGenerator _numbers;
     private readonly IAuditService _audit;
+    private readonly IReferralService _referrals;
 
     public BillingService(
         IAppDbContext db,
         ICurrentUser currentUser,
         IStockEngine stock,
         IDocumentNumberGenerator numbers,
-        IAuditService audit)
+        IAuditService audit,
+        IReferralService referrals)
     {
         _db = db;
         _currentUser = currentUser;
         _stock = stock;
         _numbers = numbers;
         _audit = audit;
+        _referrals = referrals;
     }
 
     public async Task<BillDto> CreateBillAsync(CreateBillRequest request, CancellationToken cancellationToken = default)
@@ -91,9 +94,22 @@ public sealed class BillingService : IBillingService
             lineInputs.Add((item.Quantity, product.SellingPrice, item.DiscountAmount, product.TaxPercent, product, item));
         }
 
+        var eligible = Money.Round(lineInputs.Sum(l => (l.Qty * l.Rate) - l.Discount));
+        var storeDiscountAmount = await ResolveStoreDiscountAsync(request.StoreDiscountId, storeId, eligible, cancellationToken);
+        var referralPreview = billType == BillType.Sale && customer is not null
+            ? await _referrals.PreviewAsync(customer, request.ReferralCode, request.ReferringMobileNumber, eligible, storeId, cancellationToken)
+            : new DTOs.Operations.ReferralPreviewDto { EligibleAmount = eligible };
+        if (billType == BillType.Sale && customer is null && (!string.IsNullOrWhiteSpace(request.ReferralCode) || !string.IsNullOrWhiteSpace(request.ReferringMobileNumber)))
+        {
+            throw new ValidationAppException("Select or create a customer before applying a referral code.");
+        }
+
+        var combinedDiscount = Money.Round(request.BillDiscount + storeDiscountAmount + referralPreview.NewCustomerDiscount);
         var totals = BillCalculator.CalculateTotals(
             lineInputs.Select(l => (l.Qty, l.Rate, l.Discount, l.Tax)).ToList(),
-            request.BillDiscount);
+            combinedDiscount);
+
+        var salesPersonId = await StaffResolver.ResolveSalesPersonIdAsync(_db, _currentUser, storeId, request.SalesPersonId, cancellationToken);
 
         var creditPayment = request.Payments.Where(p => p.PaymentMode == PaymentMode.Credit).Sum(p => p.Amount);
         var collected = request.Payments.Where(p => p.PaymentMode != PaymentMode.Credit).ToList();
@@ -145,7 +161,7 @@ public sealed class BillingService : IBillingService
         {
             StoreId = storeId,
             CustomerId = customer?.Id,
-            SalesPersonId = _currentUser.UserId,
+            SalesPersonId = salesPersonId,
             BillNumber = billNumber,
             BillDate = DateTime.UtcNow,
             BillType = billType,
@@ -158,6 +174,9 @@ public sealed class BillingService : IBillingService
             PaidAmount = paid,
             DueAmount = due,
             WalletRedeemed = request.WalletRedeemAmount,
+            ReferralDiscount = referralPreview.NewCustomerDiscount,
+            StoreDiscountAmount = storeDiscountAmount,
+            StoreDiscountId = request.StoreDiscountId,
             Notes = request.Notes,
             ExchangeOfBillId = exchangeOfBillId,
             CreatedDate = DateTime.UtcNow,
@@ -245,7 +264,10 @@ public sealed class BillingService : IBillingService
                 await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, request.WalletRedeemAmount, LedgerTransactionType.WalletRedeem, $"Wallet redeemed on {billNumber}", cancellationToken);
             }
 
-            await ProcessReferralAsync(customer, bill, settings, request, cancellationToken);
+            if (billType == BillType.Sale)
+            {
+                await _referrals.ProcessSaleAsync(customer, bill, request, eligible, referralPreview.NewCustomerDiscount, cancellationToken);
+            }
         }
 
         if (request.HeldBillId.HasValue)
@@ -277,10 +299,13 @@ public sealed class BillingService : IBillingService
             .Include(b => b.Store)
             .Include(b => b.Customer)
             .Include(b => b.SalesPerson)
+            .Include(b => b.StoreDiscount)
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken)
             ?? throw new NotFoundAppException("Bill not found.");
         _currentUser.Access().EnsureStoreAccess(bill.StoreId);
-        return Map(bill, _currentUser.IsAdmin);
+        var dto = Map(bill, _currentUser.IsAdmin);
+        await ApplyItemFulfillmentAsync(dto, cancellationToken);
+        return dto;
     }
 
     public async Task CancelBillAsync(int id, string? reason, CancellationToken cancellationToken = default)
@@ -502,6 +527,8 @@ public sealed class BillingService : IBillingService
             PaidAmount = b.PaidAmount,
             DueAmount = b.DueAmount,
             WalletRedeemed = b.WalletRedeemed,
+            ReferralDiscount = b.ReferralDiscount,
+            StoreDiscountAmount = b.StoreDiscountAmount,
             Notes = b.Notes
         });
         return await projected.ToPagedAsync(request, cancellationToken);
@@ -543,115 +570,68 @@ public sealed class BillingService : IBillingService
         customer.UpdatedDate = DateTime.UtcNow;
     }
 
-    private async Task ProcessReferralAsync(Customer customer, Bill bill, BusinessSetting settings, CreateBillRequest request, CancellationToken cancellationToken)
+    private async Task<decimal> ResolveStoreDiscountAsync(int? discountId, int storeId, decimal eligible, CancellationToken cancellationToken)
     {
-        if (!settings.ReferralEnabled)
+        if (!discountId.HasValue)
         {
-            return;
+            return 0;
         }
 
-        var existing = await _db.Referrals.FirstOrDefaultAsync(r => r.ReferredCustomerId == customer.Id, cancellationToken);
-        if (existing is null)
+        var discount = await _db.StoreDiscounts.FirstOrDefaultAsync(d => d.Id == discountId && !d.IsDeleted, cancellationToken)
+            ?? throw new NotFoundAppException("Discount not found.");
+        if (!discount.IsActive || discount.StoreId != storeId)
         {
-            Customer? referrer = null;
-            if (!string.IsNullOrWhiteSpace(request.ReferralCode))
-            {
-                referrer = await _db.Customers.FirstOrDefaultAsync(c => c.ReferralCode == request.ReferralCode && c.Id != customer.Id, cancellationToken);
-            }
-            else if (!string.IsNullOrWhiteSpace(request.ReferringMobileNumber))
-            {
-                referrer = await _db.Customers.FirstOrDefaultAsync(c => c.MobileNumber == request.ReferringMobileNumber && c.Id != customer.Id, cancellationToken);
-            }
-            else if (customer.ReferredByCustomerId.HasValue)
-            {
-                referrer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customer.ReferredByCustomerId, cancellationToken);
-            }
-
-            if (referrer is null)
-            {
-                return;
-            }
-
-            existing = new Referral
-            {
-                StoreId = bill.StoreId,
-                ReferrerCustomerId = referrer.Id,
-                ReferredCustomerId = customer.Id,
-                BillId = bill.Id,
-                ReferralDate = DateTime.UtcNow,
-                Status = ReferralRewardStatus.Pending,
-                CreatedDate = DateTime.UtcNow,
-                IsActive = true
-            };
-            _db.Referrals.Add(existing);
-            await _db.SaveChangesAsync(cancellationToken);
+            throw new BusinessAppException("The selected discount is not active for this store.");
         }
 
-        var priorSales = await _db.Bills.CountAsync(b => b.CustomerId == customer.Id && b.Status != BillStatus.Cancelled && b.Id != bill.Id, cancellationToken);
-        if (settings.RewardTrigger == RewardTrigger.FirstPurchase && priorSales > 0)
+        var today = DateTime.UtcNow.Date;
+        if (discount.ValidFrom.HasValue && today < discount.ValidFrom.Value.Date)
         {
-            return;
+            throw new BusinessAppException("The selected discount is not yet valid.");
         }
 
-        var baseAmount = bill.GrandTotal;
-        decimal referrerAmount = settings.RewardType == RewardType.Percentage
-            ? Money.Round(baseAmount * settings.ReferrerReward / 100m)
-            : settings.ReferrerReward;
-        decimal newCustAmount = settings.RewardType == RewardType.Percentage
-            ? Money.Round(baseAmount * settings.NewCustomerReward / 100m)
-            : settings.NewCustomerReward;
+        if (discount.ValidTo.HasValue && today > discount.ValidTo.Value.Date)
+        {
+            throw new BusinessAppException("The selected discount has expired.");
+        }
 
-        existing.BillId = bill.Id;
-        existing.RewardAmount = Money.Round(referrerAmount + newCustAmount);
-        existing.Status = ReferralRewardStatus.Credited;
-
-        await CreditWalletAsync(existing.ReferrerCustomerId, bill.StoreId, referrerAmount, bill, true, existing.Id, cancellationToken);
-        await CreditWalletAsync(customer.Id, bill.StoreId, newCustAmount, bill, false, existing.Id, cancellationToken);
-        await _audit.LogAsync(AuditActions.ReferralReward, nameof(Referral), existing.Id.ToString(), null, new { referrerAmount, newCustAmount }, bill.StoreId, cancellationToken);
+        return discount.DiscountKind == DiscountKind.Percentage
+            ? ReferralCalculator.ComputeBenefit(eligible, discount.Value, RewardType.Percentage)
+            : ReferralCalculator.ComputeBenefit(eligible, discount.Value, RewardType.FixedAmount);
     }
 
-    private async Task CreditWalletAsync(int customerId, int storeId, decimal amount, Bill bill, bool isReferrer, int referralId, CancellationToken cancellationToken)
+    private async Task ApplyItemFulfillmentAsync(BillDto dto, CancellationToken cancellationToken)
     {
-        if (amount <= 0)
+        if (dto.Items.Count == 0)
         {
             return;
         }
 
-        await _db.Customers.Where(c => c.Id == customerId)
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.WalletBalance, c => c.WalletBalance + amount), cancellationToken);
-        var newBalance = await _db.Customers.AsNoTracking().Where(c => c.Id == customerId).Select(c => c.WalletBalance).SingleAsync(cancellationToken);
-        var customer = await _db.Customers.FirstAsync(c => c.Id == customerId, cancellationToken);
-        customer.WalletBalance = newBalance;
-        _db.WalletTransactions.Add(new WalletTransaction
+        var ids = dto.Items.Select(i => i.Id).ToList();
+        var rows = await _db.ReturnItems.AsNoTracking()
+            .Where(ri => ids.Contains(ri.OriginalBillItemId))
+            .Select(ri => new { ri.OriginalBillItemId, ri.Quantity, ri.ProductReturn.ReturnKind })
+            .ToListAsync(cancellationToken);
+        foreach (var item in dto.Items)
         {
-            CustomerId = customerId,
-            StoreId = storeId,
-            Amount = amount,
-            BalanceAfter = customer.WalletBalance,
-            TransactionType = LedgerTransactionType.WalletCredit,
-            Description = isReferrer ? $"Referral reward {bill.BillNumber}" : $"Welcome reward {bill.BillNumber}",
-            ReferenceId = bill.Id,
-            ReferenceNumber = bill.BillNumber,
-            UserId = _currentUser.UserId,
-            CreatedDate = DateTime.UtcNow,
-            IsActive = true
-        });
-        _db.ReferralRewards.Add(new ReferralReward
-        {
-            ReferralId = referralId,
-            CustomerId = customerId,
-            BillId = bill.Id,
-            Amount = amount,
-            Status = ReferralRewardStatus.Credited,
-            IsReferrerReward = isReferrer,
-            CreatedDate = DateTime.UtcNow,
-            IsActive = true
-        });
-        await AddLedgerAsync(customer, storeId, bill.Id, bill.BillNumber, 0, 0, LedgerTransactionType.WalletCredit, $"Wallet credit {bill.BillNumber}", cancellationToken);
-        customer.WalletBalance = customer.WalletBalance;
+            var returned = rows.Where(r => r.OriginalBillItemId == item.Id && r.ReturnKind == ReturnKind.Return).Sum(r => r.Quantity);
+            var exchanged = rows.Where(r => r.OriginalBillItemId == item.Id && r.ReturnKind == ReturnKind.Exchange).Sum(r => r.Quantity);
+            item.ReturnedQuantity = returned;
+            item.ExchangedQuantity = exchanged;
+            item.RemainingQuantity = Math.Max(0, item.Quantity - returned - exchanged);
+            item.FulfillmentStatus = exchanged >= item.Quantity && item.Quantity > 0
+                ? BillItemFulfillmentStatus.Exchanged
+                : returned >= item.Quantity && item.Quantity > 0
+                    ? BillItemFulfillmentStatus.Returned
+                    : exchanged > 0
+                        ? BillItemFulfillmentStatus.PartiallyExchanged
+                        : returned > 0
+                            ? BillItemFulfillmentStatus.PartiallyReturned
+                            : BillItemFulfillmentStatus.Sold;
+        }
     }
 
-    private static BillDto Map(Bill b, bool includePurchasePrice = false) => new()
+    private BillDto Map(Bill b, bool includePurchasePrice = false) => new()
     {
         Id = b.Id,
         StoreId = b.StoreId,
@@ -674,6 +654,10 @@ public sealed class BillingService : IBillingService
         PaidAmount = b.PaidAmount,
         DueAmount = b.DueAmount,
         WalletRedeemed = b.WalletRedeemed,
+        ReferralDiscount = b.ReferralDiscount,
+        StoreDiscountAmount = b.StoreDiscountAmount,
+        StoreDiscountId = b.StoreDiscountId,
+        StoreDiscountName = b.StoreDiscount?.Name,
         Notes = b.Notes,
         Items = b.Items.Select(i => new BillItemDto
         {
@@ -687,7 +671,9 @@ public sealed class BillingService : IBillingService
             DiscountAmount = i.DiscountAmount,
             TaxPercent = i.TaxPercent,
             TaxAmount = i.TaxAmount,
-            Total = i.Total
+            Total = i.Total,
+            RemainingQuantity = i.Quantity,
+            FulfillmentStatus = BillItemFulfillmentStatus.Sold
         }).ToList(),
         Payments = b.Payments.Select(p => new PaymentDto
         {

@@ -19,12 +19,16 @@ public class Bill : BaseEntity
     public decimal PaidAmount { get; set; }
     public decimal DueAmount { get; set; }
     public decimal WalletRedeemed { get; set; }
+    public decimal ReferralDiscount { get; set; }
+    public decimal StoreDiscountAmount { get; set; }
+    public int? StoreDiscountId { get; set; }
     public string? Notes { get; set; }
     public int? ExchangeOfBillId { get; set; }
 
     public Store Store { get; set; } = null!;
     public Customer? Customer { get; set; }
     public ApplicationUser SalesPerson { get; set; } = null!;
+    public StoreDiscount? StoreDiscount { get; set; }
     public Bill? ExchangeOfBill { get; set; }
     public ICollection<BillItem> Items { get; set; } = new List<BillItem>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();

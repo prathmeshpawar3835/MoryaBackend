@@ -86,9 +86,9 @@ public sealed class CreatePurchaseRequestValidator : AbstractValidator<CreatePur
     public CreatePurchaseRequestValidator()
     {
         RuleFor(x => x.StoreId).GreaterThan(0);
-        RuleFor(x => x.SupplierName).NotEmpty();
         RuleFor(x => x.InvoiceNumber).NotEmpty();
         RuleFor(x => x.Items).NotEmpty();
+        RuleFor(x => x.SupplierName).NotEmpty().When(x => !x.SupplierId.HasValue);
     }
 }
 
@@ -112,6 +112,9 @@ public sealed class ApplicationServiceRegistration
         services.AddScoped<Interfaces.IReturnService, Services.ReturnService>();
         services.AddScoped<Interfaces.ICustomerService, Services.CustomerService>();
         services.AddScoped<Interfaces.IReferralService, Services.ReferralService>();
+        services.AddScoped<Interfaces.IDiscountService, Services.DiscountService>();
+        services.AddScoped<Interfaces.ISupplierService, Services.SupplierService>();
+        services.AddScoped<Interfaces.IRepairService, Services.RepairService>();
         services.AddScoped<Interfaces.IDashboardService, Services.DashboardService>();
         services.AddScoped<Interfaces.IReportService, Services.ReportService>();
         services.AddScoped<Interfaces.ISettingsService, Services.SettingsService>();

@@ -41,11 +41,18 @@ public sealed class ReferralConfiguration : IEntityTypeConfiguration<Referral>
         builder.ToTable("Referrals");
         builder.HasIndex(x => x.ReferrerCustomerId);
         builder.HasIndex(x => x.ReferredCustomerId);
+        builder.HasIndex(x => x.ReferralCode);
+        builder.Property(x => x.ReferralCode).HasMaxLength(20);
         builder.Property(x => x.RewardAmount).Money();
+        builder.Property(x => x.SaleAmount).Money();
+        builder.Property(x => x.DiscountGiven).Money();
+        builder.Property(x => x.NewCustomerPercent).HasPrecision(5, 2);
+        builder.Property(x => x.ReferrerPercent).HasPrecision(5, 2);
         builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ReferrerCustomer).WithMany().HasForeignKey(x => x.ReferrerCustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ReferredCustomer).WithMany().HasForeignKey(x => x.ReferredCustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Bill).WithMany().HasForeignKey(x => x.BillId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.SalesPerson).WithMany().HasForeignKey(x => x.SalesPersonId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -55,9 +62,12 @@ public sealed class ReferralRewardConfiguration : IEntityTypeConfiguration<Refer
     {
         builder.ToTable("ReferralRewards");
         builder.Property(x => x.Amount).Money();
+        builder.Property(x => x.Description).HasMaxLength(500);
         builder.HasOne(x => x.Referral).WithMany(x => x.Rewards).HasForeignKey(x => x.ReferralId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Bill).WithMany().HasForeignKey(x => x.BillId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Return).WithMany().HasForeignKey(x => x.ReturnId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.LedgerEntry).WithMany().HasForeignKey(x => x.LedgerEntryId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

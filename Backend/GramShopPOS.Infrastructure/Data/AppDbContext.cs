@@ -44,6 +44,10 @@ public sealed class AppDbContext : DbContext, IAppDbContext
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
     public DbSet<ProductImportBatch> ProductImportBatches => Set<ProductImportBatch>();
+    public DbSet<StoreDiscount> StoreDiscounts => Set<StoreDiscount>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<RepairJob> RepairJobs => Set<RepairJob>();
+    public DbSet<RepairJobHistory> RepairJobHistories => Set<RepairJobHistory>();
 
     public async Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
         await Database.BeginTransactionAsync(cancellationToken);

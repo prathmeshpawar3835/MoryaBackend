@@ -11,7 +11,16 @@ namespace GramShopPOS.API.Controllers;
 public sealed class PosController : ControllerBase
 {
     private readonly IBillingService _billing;
-    public PosController(IBillingService billing) => _billing = billing;
+    private readonly IUserService _users;
+    public PosController(IBillingService billing, IUserService users)
+    {
+        _billing = billing;
+        _users = users;
+    }
+
+    [HttpGet("sales-persons")]
+    public async Task<IActionResult> SalesPersons([FromQuery] int storeId, CancellationToken cancellationToken) =>
+        Ok(await _users.GetSalesPersonsAsync(storeId, cancellationToken));
 
     [HttpPost("bills")]
     public async Task<IActionResult> Create([FromBody] CreateBillRequest request, CancellationToken cancellationToken) =>

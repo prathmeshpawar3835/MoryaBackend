@@ -12,6 +12,8 @@ public class CreateBillRequest
     public string? ReferralCode { get; set; }
     public string? ReferringMobileNumber { get; set; }
     public decimal WalletRedeemAmount { get; set; }
+    public int? SalesPersonId { get; set; }
+    public int? StoreDiscountId { get; set; }
     public IReadOnlyList<CreateBillItemRequest> Items { get; set; } = [];
     public IReadOnlyList<CreatePaymentRequest> Payments { get; set; } = [];
 }
@@ -53,6 +55,10 @@ public class BillDto
     public decimal PaidAmount { get; set; }
     public decimal DueAmount { get; set; }
     public decimal WalletRedeemed { get; set; }
+    public decimal ReferralDiscount { get; set; }
+    public decimal StoreDiscountAmount { get; set; }
+    public int? StoreDiscountId { get; set; }
+    public string? StoreDiscountName { get; set; }
     public string? Notes { get; set; }
     public IReadOnlyList<BillItemDto> Items { get; set; } = [];
     public IReadOnlyList<PaymentDto> Payments { get; set; } = [];
@@ -71,6 +77,10 @@ public class BillItemDto
     public decimal TaxPercent { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal Total { get; set; }
+    public decimal ReturnedQuantity { get; set; }
+    public decimal ExchangedQuantity { get; set; }
+    public decimal RemainingQuantity { get; set; }
+    public BillItemFulfillmentStatus FulfillmentStatus { get; set; }
 }
 
 public class PaymentDto
@@ -113,6 +123,7 @@ public class CreateReturnRequest
 {
     public int OriginalBillId { get; set; }
     public string? Reason { get; set; }
+    public int? SalesPersonId { get; set; }
     public IReadOnlyList<CreateReturnItemRequest> Items { get; set; } = [];
 }
 
@@ -135,11 +146,14 @@ public class ReturnDto
     public string? Reason { get; set; }
     public ReturnKind ReturnKind { get; set; }
     public int? ExchangeBillId { get; set; }
+    public int? SalesPersonId { get; set; }
+    public string? SalesPersonName { get; set; }
     public IReadOnlyList<ReturnItemDto> Items { get; set; } = [];
 }
 
 public class ReturnItemDto
 {
+    public int OriginalBillItemId { get; set; }
     public int ProductId { get; set; }
     public string ProductCode { get; set; } = string.Empty;
     public string ProductName { get; set; } = string.Empty;
@@ -156,6 +170,7 @@ public class CreateExchangeRequest
     public IReadOnlyList<CreateBillItemRequest> NewItems { get; set; } = [];
     public decimal BillDiscount { get; set; }
     public decimal WalletRedeemAmount { get; set; }
+    public int? SalesPersonId { get; set; }
     public IReadOnlyList<CreatePaymentRequest> Payments { get; set; } = [];
 }
 

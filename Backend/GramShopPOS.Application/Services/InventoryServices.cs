@@ -280,6 +280,7 @@ public sealed class PurchaseService : IPurchaseService
             Id = p.Id,
             StoreId = p.StoreId,
             StoreCode = p.Store.StoreCode,
+            SupplierId = p.SupplierId,
             SupplierName = p.SupplierName,
             InvoiceNumber = p.InvoiceNumber,
             PurchaseDate = p.PurchaseDate,
@@ -310,10 +311,24 @@ public sealed class PurchaseService : IPurchaseService
         }
 
         await using var tx = await _db.BeginTransactionAsync(cancellationToken);
+        var supplierName = request.SupplierName?.Trim() ?? string.Empty;
+        int? supplierId = request.SupplierId;
+        if (supplierId.HasValue)
+        {
+            var supplier = await _db.Suppliers.FirstOrDefaultAsync(s => s.Id == supplierId && !s.IsDeleted && s.IsActive, cancellationToken)
+                ?? throw new NotFoundAppException("Supplier not found.");
+            supplierName = supplier.Name;
+        }
+        else if (string.IsNullOrWhiteSpace(supplierName))
+        {
+            throw new ValidationAppException("Supplier name is required.");
+        }
+
         var purchase = new Purchase
         {
             StoreId = request.StoreId,
-            SupplierName = request.SupplierName.Trim(),
+            SupplierId = supplierId,
+            SupplierName = supplierName,
             InvoiceNumber = request.InvoiceNumber.Trim(),
             PurchaseDate = request.Date ?? DateTime.UtcNow,
             Notes = request.Notes,
@@ -379,6 +394,7 @@ public sealed class PurchaseService : IPurchaseService
         Id = p.Id,
         StoreId = p.StoreId,
         StoreCode = p.Store?.StoreCode ?? string.Empty,
+        SupplierId = p.SupplierId,
         SupplierName = p.SupplierName,
         InvoiceNumber = p.InvoiceNumber,
         PurchaseDate = p.PurchaseDate,

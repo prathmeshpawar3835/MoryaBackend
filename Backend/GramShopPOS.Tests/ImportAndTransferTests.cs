@@ -61,7 +61,7 @@ public class ImportAndTransferTests
     }
 
     [Fact]
-    public async Task Referral_credits_wallet_on_first_purchase()
+    public async Task Referral_applies_new_customer_discount_and_referrer_ledger_credit()
     {
         await using var fx = new SqliteFixture();
         var referrer = fx.Db.Customers.First();
@@ -73,16 +73,19 @@ public class ImportAndTransferTests
             MobileNumber = "9111111111",
             ReferralCode = referrer.ReferralCode
         });
-        var billing = new BillingService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User));
-        await billing.CreateBillAsync(new CreateBillRequest
+        var billing = new BillingService(fx.Db, fx.User, new StockEngine(fx.Db), new DocumentNumberGenerator(fx.Db), new AuditService(fx.Db, fx.User), new ReferralService(fx.Db, fx.User, new AuditService(fx.Db, fx.User)));
+        var bill = await billing.CreateBillAsync(new CreateBillRequest
         {
             StoreId = 1,
             CustomerId = referred.Id,
             Items = [new CreateBillItemRequest { ProductId = fx.Db.Products.First().Id, Quantity = 1 }],
-            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5150 }]
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5098.50m }]
         });
+        bill.ReferralDiscount.Should().Be(50);
+        bill.GrandTotal.Should().Be(5098.50m);
         (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == referrer.Id)).WalletBalance.Should().Be(600);
-        (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == referred.Id)).WalletBalance.Should().Be(50);
+        (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == referred.Id)).WalletBalance.Should().Be(0);
         fx.Db.Referrals.Should().ContainSingle();
+        fx.Db.CustomerLedgers.Should().Contain(l => l.CustomerId == referrer.Id && l.Credit == 100 && l.TransactionType == LedgerTransactionType.ReferralCredit);
     }
 }

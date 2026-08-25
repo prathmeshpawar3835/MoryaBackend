@@ -44,7 +44,7 @@ public sealed class CustomerService : ICustomerService
 
     public async Task<CustomerDto> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var customer = await _db.Customers.AsNoTracking().Include(c => c.Store)
+        var customer = await _db.Customers.AsNoTracking().Include(c => c.Store).Include(c => c.ReferredByCustomer)
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Customer not found.");
         _currentUser.Access().EnsureStoreAccess(customer.StoreId);
@@ -68,11 +68,24 @@ public sealed class CustomerService : ICustomerService
         int? referrerId = null;
         if (!string.IsNullOrWhiteSpace(request.ReferralCode))
         {
-            referrerId = await _db.Customers.Where(c => c.ReferralCode == request.ReferralCode && !c.IsDeleted).Select(c => (int?)c.Id).FirstOrDefaultAsync(cancellationToken);
+            var referrer = await _db.Customers.FirstOrDefaultAsync(c => c.ReferralCode == request.ReferralCode.Trim() && !c.IsDeleted, cancellationToken)
+                ?? throw new ValidationAppException("Invalid customer / referral code.");
+            if (referrer.MobileNumber == request.MobileNumber.Trim())
+            {
+                throw new ValidationAppException("A customer cannot refer themselves.");
+            }
+
+            referrerId = referrer.Id;
         }
         else if (!string.IsNullOrWhiteSpace(request.ReferringMobileNumber))
         {
-            referrerId = await _db.Customers.Where(c => c.MobileNumber == request.ReferringMobileNumber && !c.IsDeleted).Select(c => (int?)c.Id).FirstOrDefaultAsync(cancellationToken);
+            if (request.ReferringMobileNumber.Trim() == request.MobileNumber.Trim())
+            {
+                throw new ValidationAppException("A customer cannot refer themselves.");
+            }
+
+            referrerId = await _db.Customers.Where(c => c.MobileNumber == request.ReferringMobileNumber.Trim() && !c.IsDeleted).Select(c => (int?)c.Id).FirstOrDefaultAsync(cancellationToken)
+                ?? throw new ValidationAppException("Referring customer mobile was not found.");
         }
 
         var customer = new Customer
@@ -124,11 +137,30 @@ public sealed class CustomerService : ICustomerService
         }
 
         var s = query.Trim();
-        return await q.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s))
+        return await q.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s))
             .OrderBy(c => c.Name)
             .Take(50)
             .Select(MapExpr)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<CustomerDto?> GetByMobileAsync(string mobile, int? storeId, CancellationToken cancellationToken = default)
+    {
+        _currentUser.EnsureAuthenticated();
+        var number = mobile.Trim();
+        if (string.IsNullOrWhiteSpace(number))
+        {
+            return null;
+        }
+
+        var q = BaseQuery().Where(c => c.MobileNumber == number);
+        if (storeId.HasValue || !_currentUser.IsAdmin)
+        {
+            var resolved = _currentUser.Access().ResolveStoreId(storeId);
+            q = q.Where(c => c.StoreId == resolved);
+        }
+
+        return await q.Select(MapExpr).FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<CustomerHistoryDto> GetHistoryAsync(int id, CancellationToken cancellationToken = default)
@@ -384,6 +416,9 @@ public sealed class CustomerService : ICustomerService
         MobileNumber = c.MobileNumber,
         Address = c.Address,
         ReferralCode = c.ReferralCode,
+        CustomerCode = c.ReferralCode,
+        ReferredByCustomerId = c.ReferredByCustomerId,
+        ReferredByName = c.ReferredByCustomer != null ? c.ReferredByCustomer.Name : null,
         OutstandingBalance = c.OutstandingBalance,
         WalletBalance = c.WalletBalance,
         IsActive = c.IsActive,
@@ -399,51 +434,12 @@ public sealed class CustomerService : ICustomerService
         MobileNumber = c.MobileNumber,
         Address = c.Address,
         ReferralCode = c.ReferralCode,
+        CustomerCode = c.ReferralCode,
+        ReferredByCustomerId = c.ReferredByCustomerId,
+        ReferredByName = c.ReferredByCustomer?.Name,
         OutstandingBalance = c.OutstandingBalance,
         WalletBalance = c.WalletBalance,
         IsActive = c.IsActive,
         CreatedDate = c.CreatedDate
     };
-}
-
-public sealed class ReferralService : IReferralService
-{
-    private readonly IAppDbContext _db;
-    private readonly ICurrentUser _currentUser;
-
-    public ReferralService(IAppDbContext db, ICurrentUser currentUser)
-    {
-        _db = db;
-        _currentUser = currentUser;
-    }
-
-    public async Task<PagedResponse<ReferralDto>> GetAsync(PagedRequest request, CancellationToken cancellationToken = default)
-    {
-        _currentUser.EnsureAuthenticated();
-        var query = _db.Referrals.AsNoTracking().AsQueryable();
-        if (!_currentUser.IsAdmin)
-        {
-            var ids = _currentUser.AssignedStoreIds;
-            query = query.Where(r => ids.Contains(r.StoreId));
-        }
-
-        if (request.StoreId.HasValue)
-        {
-            _currentUser.Access().EnsureStoreAccess(request.StoreId.Value);
-            query = query.Where(r => r.StoreId == request.StoreId.Value);
-        }
-
-        var projected = query.OrderByDescending(r => r.ReferralDate).Select(r => new ReferralDto
-        {
-            Id = r.Id,
-            ReferrerCustomerId = r.ReferrerCustomerId,
-            ReferrerName = r.ReferrerCustomer.Name,
-            ReferredCustomerId = r.ReferredCustomerId,
-            ReferredName = r.ReferredCustomer.Name,
-            RewardAmount = r.RewardAmount,
-            Status = r.Status,
-            ReferralDate = r.ReferralDate
-        });
-        return await projected.ToPagedAsync(request, cancellationToken);
-    }
 }

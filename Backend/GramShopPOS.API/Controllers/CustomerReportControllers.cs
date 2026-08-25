@@ -42,6 +42,13 @@ public sealed class CustomersController : ControllerBase
     public async Task<IActionResult> Search([FromQuery] string query, [FromQuery] int? storeId, CancellationToken cancellationToken) =>
         Ok(await _customers.SearchAsync(query ?? string.Empty, storeId, cancellationToken));
 
+    [HttpGet("by-mobile")]
+    public async Task<IActionResult> ByMobile([FromQuery] string mobile, [FromQuery] int? storeId, CancellationToken cancellationToken)
+    {
+        var customer = await _customers.GetByMobileAsync(mobile ?? string.Empty, storeId, cancellationToken);
+        return customer is null ? NotFound() : Ok(customer);
+    }
+
     [HttpGet("{id:int}/history")]
     public async Task<IActionResult> History(int id, CancellationToken cancellationToken) =>
         Ok(await _customers.GetHistoryAsync(id, cancellationToken));
@@ -85,6 +92,10 @@ public sealed class ReferralsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PagedRequest request, CancellationToken cancellationToken) =>
         Ok(await _referrals.GetAsync(request, cancellationToken));
+
+    [HttpGet("validate")]
+    public async Task<IActionResult> Validate([FromQuery] string code, [FromQuery] int? excludeCustomerId, [FromQuery] int? storeId, CancellationToken cancellationToken) =>
+        Ok(await _referrals.ValidateCodeAsync(code ?? string.Empty, excludeCustomerId, storeId, cancellationToken));
 }
 
 [ApiController]

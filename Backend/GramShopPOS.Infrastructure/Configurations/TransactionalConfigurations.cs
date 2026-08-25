@@ -38,6 +38,7 @@ public sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.Property(x => x.Total).Money();
         builder.HasIndex(x => x.StoreId);
         builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Supplier).WithMany(x => x.Purchases).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
     }
 }
@@ -94,9 +95,12 @@ public sealed class BillConfiguration : IEntityTypeConfiguration<Bill>
         builder.Property(x => x.PaidAmount).Money();
         builder.Property(x => x.DueAmount).Money();
         builder.Property(x => x.WalletRedeemed).Money();
+        builder.Property(x => x.ReferralDiscount).Money();
+        builder.Property(x => x.StoreDiscountAmount).Money();
         builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Customer).WithMany(x => x.Bills).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SalesPerson).WithMany().HasForeignKey(x => x.SalesPersonId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.StoreDiscount).WithMany().HasForeignKey(x => x.StoreDiscountId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ExchangeOfBill).WithMany().HasForeignKey(x => x.ExchangeOfBillId).OnDelete(DeleteBehavior.Restrict);
         builder.ToTable(t => t.HasCheckConstraint("CK_Bills_GrandTotal", "[GrandTotal] >= 0"));
     }
@@ -165,6 +169,7 @@ public sealed class ProductReturnConfiguration : IEntityTypeConfiguration<Produc
         builder.HasOne(x => x.ExchangeBill).WithMany().HasForeignKey(x => x.ExchangeBillId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.SalesPerson).WithMany().HasForeignKey(x => x.SalesPersonId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

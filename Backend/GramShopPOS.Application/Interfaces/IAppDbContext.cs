@@ -40,6 +40,10 @@ public interface IAppDbContext
     DbSet<PasswordResetToken> PasswordResetTokens { get; }
     DbSet<RevokedToken> RevokedTokens { get; }
     DbSet<ProductImportBatch> ProductImportBatches { get; }
+    DbSet<StoreDiscount> StoreDiscounts { get; }
+    DbSet<Supplier> Suppliers { get; }
+    DbSet<RepairJob> RepairJobs { get; }
+    DbSet<RepairJobHistory> RepairJobHistories { get; }
 
     DatabaseFacade Database { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
