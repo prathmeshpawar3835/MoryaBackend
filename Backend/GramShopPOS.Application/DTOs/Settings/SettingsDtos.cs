@@ -25,6 +25,9 @@ public class SettingsDto
     public RewardTrigger RewardTrigger { get; set; }
     public bool ReferralStoreWise { get; set; }
     public decimal BirthdayDiscountPercent { get; set; }
+    public decimal ReturnDeductionPercent { get; set; }
+    public decimal ExchangeDeductionPercent { get; set; }
+    public decimal BuybackDeductionPercent { get; set; }
     public bool WhatsAppEnabled { get; set; }
     public string? WhatsAppPhoneNumberId { get; set; }
     public string? WhatsAppAccessToken { get; set; }

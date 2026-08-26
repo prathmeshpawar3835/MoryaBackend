@@ -25,6 +25,9 @@ public class BusinessSetting : BaseEntity
     public bool ReferralStoreWise { get; set; }
     public bool ReferralEnabled { get; set; } = true;
     public decimal BirthdayDiscountPercent { get; set; }
+    public decimal ReturnDeductionPercent { get; set; }
+    public decimal ExchangeDeductionPercent { get; set; }
+    public decimal BuybackDeductionPercent { get; set; }
     public bool WhatsAppEnabled { get; set; }
     public string? WhatsAppPhoneNumberId { get; set; }
     public string? WhatsAppAccessToken { get; set; }

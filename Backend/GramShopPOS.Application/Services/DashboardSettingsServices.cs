@@ -2,6 +2,7 @@ using GramShopPOS.Application.Common;
 using GramShopPOS.Application.DTOs.Billing;
 using GramShopPOS.Application.DTOs.Inventory;
 using GramShopPOS.Application.DTOs.Reports;
+using GramShopPOS.Application.Exceptions;
 using GramShopPOS.Application.Interfaces;
 using GramShopPOS.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -363,6 +364,16 @@ public sealed class SettingsService : ISettingsService
         s.RewardTrigger = request.RewardTrigger;
         s.ReferralStoreWise = request.ReferralStoreWise;
         s.BirthdayDiscountPercent = request.BirthdayDiscountPercent < 0 ? 0 : request.BirthdayDiscountPercent;
+        s.ReturnDeductionPercent = AdjustmentDeduction.ClampPercent(request.ReturnDeductionPercent);
+        s.ExchangeDeductionPercent = AdjustmentDeduction.ClampPercent(request.ExchangeDeductionPercent);
+        s.BuybackDeductionPercent = AdjustmentDeduction.ClampPercent(request.BuybackDeductionPercent);
+        if (request.ReturnDeductionPercent is < 0 or > 100
+            || request.ExchangeDeductionPercent is < 0 or > 100
+            || request.BuybackDeductionPercent is < 0 or > 100)
+        {
+            throw new ValidationAppException("Return, exchange, and buyback deductions must be between 0 and 100 percent.");
+        }
+
         s.WhatsAppEnabled = request.WhatsAppEnabled;
         s.WhatsAppPhoneNumberId = request.WhatsAppPhoneNumberId;
         if (!string.IsNullOrWhiteSpace(request.WhatsAppAccessToken) && request.WhatsAppAccessToken != "********")
@@ -400,6 +411,9 @@ public sealed class SettingsService : ISettingsService
         RewardTrigger = s.RewardTrigger,
         ReferralStoreWise = s.ReferralStoreWise,
         BirthdayDiscountPercent = s.BirthdayDiscountPercent,
+        ReturnDeductionPercent = s.ReturnDeductionPercent,
+        ExchangeDeductionPercent = s.ExchangeDeductionPercent,
+        BuybackDeductionPercent = s.BuybackDeductionPercent,
         WhatsAppEnabled = s.WhatsAppEnabled,
         WhatsAppPhoneNumberId = s.WhatsAppPhoneNumberId,
         WhatsAppAccessToken = string.IsNullOrWhiteSpace(s.WhatsAppAccessToken) ? null : "********",

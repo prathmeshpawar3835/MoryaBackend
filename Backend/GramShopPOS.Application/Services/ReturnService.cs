@@ -91,7 +91,7 @@ public sealed class ReturnService : IReturnService
             Reason = request.Reason,
             SalesPersonId = request.SalesPersonId,
             Items = request.Items
-        }, ReturnKind.Buyback, new ReturnCreateOptions { AmountOverride = request.Amount, PostLedger = true }, cancellationToken);
+        }, ReturnKind.Buyback, new ReturnCreateOptions { PostLedger = true }, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.BuybackCreated, nameof(ProductReturn), result.Id.ToString(), null, new { result.ReturnNumber, result.ReturnAmount }, result.StoreId, cancellationToken);
         return result;
@@ -129,6 +129,9 @@ public sealed class ReturnService : IReturnService
             ReturnDate = r.ReturnDate,
             CustomerId = r.CustomerId,
             ReturnAmount = r.ReturnAmount,
+            GrossAmount = r.GrossAmount,
+            DeductionPercent = r.DeductionPercent,
+            DeductionAmount = r.DeductionAmount,
             Reason = r.Reason,
             ReturnKind = r.ReturnKind,
             ExchangeBillId = r.ExchangeBillId

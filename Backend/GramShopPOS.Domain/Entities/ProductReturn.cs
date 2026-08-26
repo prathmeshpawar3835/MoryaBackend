@@ -11,6 +11,9 @@ public class ProductReturn : BaseEntity
     public DateTime ReturnDate { get; set; }
     public int? CustomerId { get; set; }
     public decimal ReturnAmount { get; set; }
+    public decimal GrossAmount { get; set; }
+    public decimal DeductionPercent { get; set; }
+    public decimal DeductionAmount { get; set; }
     public string? Reason { get; set; }
     public ReturnKind ReturnKind { get; set; } = ReturnKind.Return;
     public int UserId { get; set; }

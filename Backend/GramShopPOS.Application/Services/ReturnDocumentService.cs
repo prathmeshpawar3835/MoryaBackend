@@ -61,10 +61,11 @@ public sealed class ReturnDocumentService : IReturnDocumentService
 
         if (request.Items.Count == 0)
         {
-            throw new ValidationAppException("Return must contain items.");
+            throw new ValidationAppException("Select at least one product to process this return, exchange, or buyback.");
         }
 
         var settings = await _db.BusinessSettings.FirstAsync(cancellationToken);
+        var deductionPercent = AdjustmentDeduction.PercentFor(kind, settings);
         var salesPersonId = await StaffResolver.ResolveSalesPersonIdAsync(_db, _currentUser, bill.StoreId, request.SalesPersonId, cancellationToken);
         var prefix = kind switch
         {
@@ -100,22 +101,29 @@ public sealed class ReturnDocumentService : IReturnDocumentService
         foreach (var item in request.Items)
         {
             var billItem = bill.Items.FirstOrDefault(i => i.Id == item.OriginalBillItemId)
-                ?? throw new ValidationAppException("Return item does not belong to the original bill.");
-            if (item.Quantity <= 0 || item.Quantity > billItem.Quantity)
+                ?? throw new ValidationAppException("One of the selected items does not belong to the original invoice.");
+            if (item.Quantity <= 0)
             {
-                throw new ValidationAppException("Invalid return quantity.");
+                throw new ValidationAppException($"Enter a quantity greater than zero for {billItem.ProductName}.");
+            }
+
+            if (item.Quantity > billItem.Quantity)
+            {
+                throw new ValidationAppException($"Quantity for {billItem.ProductName} cannot exceed the original billed quantity of {billItem.Quantity}.");
             }
 
             var alreadyReturned = await _db.ReturnItems
                 .Where(ri => ri.OriginalBillItemId == billItem.Id)
                 .SumAsync(ri => (decimal?)ri.Quantity, cancellationToken) ?? 0;
+            var remaining = billItem.Quantity - alreadyReturned;
             if (alreadyReturned + item.Quantity > billItem.Quantity)
             {
-                throw new BusinessAppException($"Quantity exceeds remaining returnable quantity for {billItem.ProductCode}.");
+                throw new BusinessAppException($"Only {remaining} of {billItem.ProductName} ({billItem.ProductCode}) can still be returned, exchanged, or bought back.");
             }
 
-            var lineTotal = Money.Round(billItem.Total * (item.Quantity / billItem.Quantity));
-            amount += lineTotal;
+            var lineGross = Money.Round(billItem.Total * (item.Quantity / billItem.Quantity));
+            var lineNet = AdjustmentDeduction.NetOf(lineGross, deductionPercent);
+            amount += lineNet;
             var row = new ReturnItem
             {
                 ProductReturnId = ret.Id,
@@ -126,37 +134,20 @@ public sealed class ReturnDocumentService : IReturnDocumentService
                 Quantity = item.Quantity,
                 Rate = billItem.Rate,
                 TaxAmount = Money.Round(billItem.TaxAmount * (item.Quantity / billItem.Quantity)),
-                Total = lineTotal,
+                Total = lineNet,
                 CreatedDate = DateTime.UtcNow,
                 IsActive = true
             };
             _db.ReturnItems.Add(row);
-            pendingLines.Add((row, lineTotal));
+            pendingLines.Add((row, lineGross));
             var movement = kind == ReturnKind.Exchange ? StockMovementType.Exchange : StockMovementType.Return;
             await _stock.ChangeAsync(bill.StoreId, billItem.ProductId, item.Quantity, movement, ret.Id, returnNumber, request.Reason, true, _currentUser.UserId, cancellationToken);
         }
 
-        if (options.AmountOverride.HasValue)
-        {
-            if (options.AmountOverride.Value < 0)
-            {
-                throw new ValidationAppException("Buyback / adjustment amount cannot be negative.");
-            }
-
-            var original = amount == 0 ? 1 : amount;
-            var remaining = options.AmountOverride.Value;
-            for (var i = 0; i < pendingLines.Count; i++)
-            {
-                var share = i == pendingLines.Count - 1
-                    ? remaining
-                    : Money.Round(options.AmountOverride.Value * (pendingLines[i].OriginalShare / original));
-                remaining -= share;
-                pendingLines[i].Item.Total = share;
-            }
-
-            amount = options.AmountOverride.Value;
-        }
-
+        var grossAmount = Money.Round(pendingLines.Sum(l => l.OriginalShare));
+        ret.GrossAmount = grossAmount;
+        ret.DeductionPercent = deductionPercent;
+        ret.DeductionAmount = AdjustmentDeduction.DeductionOf(grossAmount, deductionPercent);
         ret.ReturnAmount = Money.Round(amount);
         if (options.PostLedger && bill.CustomerId.HasValue)
         {
@@ -221,6 +212,9 @@ public sealed class ReturnDocumentService : IReturnDocumentService
         ReturnDate = r.ReturnDate,
         CustomerId = r.CustomerId,
         ReturnAmount = r.ReturnAmount,
+        GrossAmount = r.GrossAmount,
+        DeductionPercent = r.DeductionPercent,
+        DeductionAmount = r.DeductionAmount,
         Reason = r.Reason,
         ReturnKind = r.ReturnKind,
         ExchangeBillId = r.ExchangeBillId,

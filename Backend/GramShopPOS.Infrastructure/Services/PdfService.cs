@@ -249,7 +249,13 @@ public sealed class PdfService : IPdfService
                     }
                     col.Item().Text($"Customer: {ret.Customer?.Name}  {ret.Customer?.MobileNumber}  Code: {ret.Customer?.ReferralCode}");
                     col.Item().Text($"Store: {ret.Store.StoreName}  Sales Person: {ret.SalesPerson?.FullName}");
-                    col.Item().Text($"Date: {ret.ReturnDate:dd-MMM-yyyy HH:mm}  Amount: {ret.ReturnAmount:0.00}");
+                    col.Item().Text($"Date: {ret.ReturnDate:dd-MMM-yyyy HH:mm}");
+                    if (ret.DeductionAmount > 0)
+                    {
+                        col.Item().Text($"Original value: {ret.GrossAmount:0.00}");
+                        col.Item().Text($"Admin deduction ({ret.DeductionPercent:0.##}%): -{ret.DeductionAmount:0.00}");
+                    }
+                    col.Item().Text($"Credit / buyback amount: {ret.ReturnAmount:0.00}");
                     col.Item().Text("Original / returned products:");
                     foreach (var item in ret.Items)
                     {

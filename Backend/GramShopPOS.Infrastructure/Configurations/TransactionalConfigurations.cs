@@ -182,6 +182,9 @@ public sealed class ProductReturnConfiguration : IEntityTypeConfiguration<Produc
         builder.HasIndex(x => x.ReturnNumber).IsUnique();
         builder.Property(x => x.OriginalBillNumber).HasMaxLength(50).IsRequired();
         builder.Property(x => x.ReturnAmount).Money();
+        builder.Property(x => x.GrossAmount).Money();
+        builder.Property(x => x.DeductionAmount).Money();
+        builder.Property(x => x.DeductionPercent).HasPrecision(5, 2);
         builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.OriginalBill).WithMany().HasForeignKey(x => x.OriginalBillId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ExchangeBill).WithMany().HasForeignKey(x => x.ExchangeBillId).OnDelete(DeleteBehavior.Restrict);

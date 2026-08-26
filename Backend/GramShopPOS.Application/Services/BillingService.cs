@@ -130,7 +130,7 @@ public sealed class BillingService : IBillingService
         var adjustments = request.Adjustments ?? [];
         if (adjustments.Count > 0 && customer is null)
         {
-            throw new ValidationAppException("A customer is required for exchange, return, or buyback during billing.");
+            throw new ValidationAppException("A customer is required for return, exchange, or buyback during billing.");
         }
 
         var createdAdjustments = new List<ReturnDto>();
@@ -140,14 +140,14 @@ public sealed class BillingService : IBillingService
             {
                 if (adj.Kind is not (ReturnKind.Return or ReturnKind.Exchange or ReturnKind.Buyback))
                 {
-                    throw new ValidationAppException("Invalid adjustment type.");
+                    throw new ValidationAppException("Choose Return, Exchange, or Buyback as the adjustment type.");
                 }
 
                 var original = await _db.Bills.AsNoTracking().FirstOrDefaultAsync(b => b.Id == adj.OriginalBillId, cancellationToken)
-                    ?? throw new NotFoundAppException("Original invoice for adjustment was not found.");
+                    ?? throw new NotFoundAppException("Original invoice for this return, exchange, or buyback was not found.");
                 if (original.CustomerId != customer!.Id)
                 {
-                    throw new ValidationAppException("The original invoice does not belong to the selected customer.");
+                    throw new ValidationAppException("The original invoice belongs to a different customer. Select the matching customer before applying a return, exchange, or buyback.");
                 }
 
                 createdAdjustments.Add(await _returns.CreateCoreAsync(
@@ -159,7 +159,7 @@ public sealed class BillingService : IBillingService
                         Items = adj.Items
                     },
                     adj.Kind,
-                    new ReturnCreateOptions { PostLedger = false, AmountOverride = adj.Amount },
+                    new ReturnCreateOptions { PostLedger = false },
                     cancellationToken));
             }
         }
