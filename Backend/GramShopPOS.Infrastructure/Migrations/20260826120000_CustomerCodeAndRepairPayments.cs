@@ -1,5 +1,3 @@
-using GramShopPOS.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -7,8 +5,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace GramShopPOS.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    [DbContext(typeof(AppDbContext))]
-    [Migration("20260826120000_CustomerCodeAndRepairPayments")]
     public partial class CustomerCodeAndRepairPayments : Migration
     {
         /// <inheritdoc />
