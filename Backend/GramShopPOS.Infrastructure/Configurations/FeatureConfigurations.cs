@@ -52,6 +52,10 @@ public sealed class RepairJobConfiguration : IEntityTypeConfiguration<RepairJob>
         builder.Property(x => x.ProductName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.ProductDetails).HasMaxLength(500);
         builder.Property(x => x.Notes).HasMaxLength(1000);
+        builder.Property(x => x.EstimatedAmount).Money();
+        builder.Property(x => x.FinalAmount).Money();
+        builder.Property(x => x.PaidAmount).Money();
+        builder.Property(x => x.PaymentReference).HasMaxLength(80);
         builder.HasIndex(x => x.StoreId);
         builder.HasIndex(x => x.ReceivedDate);
         builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);

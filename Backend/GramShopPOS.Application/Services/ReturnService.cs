@@ -35,7 +35,7 @@ public sealed class ReturnService : IReturnService
     {
         _currentUser.EnsureAuthenticated();
         await using var tx = await _db.BeginTransactionAsync(cancellationToken);
-        var result = await _documents.CreateCoreAsync(request, ReturnKind.Return, null, cancellationToken);
+        var result = await _documents.CreateCoreAsync(request, ReturnKind.Return, new ReturnCreateOptions { AmountOverride = request.Amount }, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.ReturnCreated, nameof(ProductReturn), result.Id.ToString(), null, new { result.ReturnNumber, result.ReturnAmount }, result.StoreId, cancellationToken);
         return result;
@@ -50,8 +50,9 @@ public sealed class ReturnService : IReturnService
             OriginalBillId = request.OriginalBillId,
             Reason = request.Reason,
             SalesPersonId = request.SalesPersonId,
+            Amount = request.Amount,
             Items = request.ReturnItems
-        }, ReturnKind.Exchange, null, cancellationToken);
+        }, ReturnKind.Exchange, new ReturnCreateOptions { AmountOverride = request.Amount }, cancellationToken);
 
         var original = await _db.Bills.FirstAsync(b => b.Id == request.OriginalBillId, cancellationToken);
         var salesPersonId = await StaffResolver.ResolveSalesPersonIdAsync(_db, _currentUser, original.StoreId, request.SalesPersonId, cancellationToken);
@@ -90,8 +91,9 @@ public sealed class ReturnService : IReturnService
             OriginalBillId = request.OriginalBillId,
             Reason = request.Reason,
             SalesPersonId = request.SalesPersonId,
+            Amount = request.Amount,
             Items = request.Items
-        }, ReturnKind.Buyback, new ReturnCreateOptions { PostLedger = true }, cancellationToken);
+        }, ReturnKind.Buyback, new ReturnCreateOptions { PostLedger = true, AmountOverride = request.Amount }, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.BuybackCreated, nameof(ProductReturn), result.Id.ToString(), null, new { result.ReturnNumber, result.ReturnAmount }, result.StoreId, cancellationToken);
         return result;

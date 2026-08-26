@@ -101,6 +101,7 @@ public sealed class SqliteFixture : IAsyncDisposable
             Name = "Walk In",
             MobileNumber = "9000000000",
             ReferralCode = "RF100001",
+            CustomerCode = "CUS000001",
             WalletBalance = 500,
             IsActive = true,
             CreatedDate = DateTime.UtcNow

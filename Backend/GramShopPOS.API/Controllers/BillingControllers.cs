@@ -12,15 +12,21 @@ public sealed class PosController : ControllerBase
 {
     private readonly IBillingService _billing;
     private readonly IUserService _users;
-    public PosController(IBillingService billing, IUserService users)
+    private readonly ISettingsService _settings;
+    public PosController(IBillingService billing, IUserService users, ISettingsService settings)
     {
         _billing = billing;
         _users = users;
+        _settings = settings;
     }
 
     [HttpGet("sales-persons")]
     public async Task<IActionResult> SalesPersons([FromQuery] int storeId, CancellationToken cancellationToken) =>
         Ok(await _users.GetSalesPersonsAsync(storeId, cancellationToken));
+
+    [HttpGet("billing-rules")]
+    public async Task<IActionResult> BillingRules(CancellationToken cancellationToken) =>
+        Ok(await _settings.GetPosRulesAsync(cancellationToken));
 
     [HttpPost("bills")]
     public async Task<IActionResult> Create([FromBody] CreateBillRequest request, CancellationToken cancellationToken) =>

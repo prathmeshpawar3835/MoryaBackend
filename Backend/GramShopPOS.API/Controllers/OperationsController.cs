@@ -89,6 +89,14 @@ public sealed class RepairsController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateRepairJobRequest request, CancellationToken cancellationToken) =>
         Ok(await _repairs.UpdateAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/payments")]
+    public async Task<IActionResult> Pay(int id, [FromBody] CollectRepairPaymentRequest request, CancellationToken cancellationToken) =>
+        Ok(await _repairs.CollectPaymentAsync(id, request, cancellationToken));
+
+    [HttpGet("{id:int}/pdf")]
+    public async Task<IActionResult> Pdf(int id, [FromServices] IPdfService pdf, CancellationToken cancellationToken) =>
+        Ok(await pdf.RepairReceiptPdfAsync(id, cancellationToken));
 }
 
 [ApiController]

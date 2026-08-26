@@ -115,6 +115,8 @@ public interface ICustomerService
     Task<IReadOnlyList<CustomerDto>> SearchAsync(string query, int? storeId, CancellationToken cancellationToken = default);
     Task<CustomerHistoryDto> GetHistoryAsync(int id, CancellationToken cancellationToken = default);
     Task<PagedResponse<LedgerEntryDto>> GetLedgerAsync(int id, PagedRequest request, CancellationToken cancellationToken = default);
+    Task<LedgerSummaryDto> GetLedgerSummaryAsync(int id, CancellationToken cancellationToken = default);
+    Task<LedgerReceiptDto> GetLedgerReceiptAsync(int customerId, int entryId, CancellationToken cancellationToken = default);
     Task<PaymentDto> ReceivePaymentAsync(int customerId, CustomerPaymentRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PaymentDto>> GetPaymentsAsync(int customerId, CancellationToken cancellationToken = default);
     Task<WalletDto> GetWalletAsync(int customerId, CancellationToken cancellationToken = default);
@@ -152,6 +154,7 @@ public interface IRepairService
     Task<DTOs.Operations.RepairJobDto> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<DTOs.Operations.RepairJobDto> CreateAsync(DTOs.Operations.CreateRepairJobRequest request, CancellationToken cancellationToken = default);
     Task<DTOs.Operations.RepairJobDto> UpdateAsync(int id, DTOs.Operations.UpdateRepairJobRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Operations.RepairJobDto> CollectPaymentAsync(int id, DTOs.Operations.CollectRepairPaymentRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface IDashboardService
@@ -182,7 +185,9 @@ public interface IPdfService
 {
     Task<FileDownload> InvoicePdfAsync(int billId, CancellationToken cancellationToken = default);
     Task<FileDownload> LedgerPdfAsync(int customerId, CancellationToken cancellationToken = default);
+    Task<FileDownload> LedgerReceiptPdfAsync(int customerId, int entryId, CancellationToken cancellationToken = default);
     Task<FileDownload> ReturnNotePdfAsync(int returnId, CancellationToken cancellationToken = default);
+    Task<FileDownload> RepairReceiptPdfAsync(int jobId, CancellationToken cancellationToken = default);
     FileDownload SalesReportPdf(SalesReportDto report);
     FileDownload InventoryReportPdf(IReadOnlyList<InventoryReportRowDto> rows);
 }
@@ -190,6 +195,7 @@ public interface IPdfService
 public interface ISettingsService
 {
     Task<SettingsDto> GetAsync(CancellationToken cancellationToken = default);
+    Task<PosBillingRulesDto> GetPosRulesAsync(CancellationToken cancellationToken = default);
     Task<SettingsDto> UpdateAsync(UpdateSettingsRequest request, CancellationToken cancellationToken = default);
 }
 

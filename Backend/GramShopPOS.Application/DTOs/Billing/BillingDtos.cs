@@ -154,6 +154,7 @@ public class CreateReturnRequest
     public int OriginalBillId { get; set; }
     public string? Reason { get; set; }
     public int? SalesPersonId { get; set; }
+    public decimal? Amount { get; set; }
     public IReadOnlyList<CreateReturnItemRequest> Items { get; set; } = [];
 }
 
@@ -206,6 +207,7 @@ public class CreateExchangeRequest
     public decimal BillDiscount { get; set; }
     public decimal WalletRedeemAmount { get; set; }
     public int? SalesPersonId { get; set; }
+    public decimal? Amount { get; set; }
     public IReadOnlyList<CreatePaymentRequest> Payments { get; set; } = [];
 }
 

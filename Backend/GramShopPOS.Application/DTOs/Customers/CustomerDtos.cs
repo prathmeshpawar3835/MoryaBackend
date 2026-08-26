@@ -56,10 +56,42 @@ public class LedgerEntryDto
     public DateTime TransactionDate { get; set; }
     public LedgerTransactionType TransactionType { get; set; }
     public string Description { get; set; } = string.Empty;
+    public int? ReferenceId { get; set; }
     public string? ReferenceNumber { get; set; }
     public decimal Debit { get; set; }
     public decimal Credit { get; set; }
     public decimal Balance { get; set; }
+}
+
+public class LedgerSummaryDto
+{
+    public decimal OpeningBalance { get; set; }
+    public decimal TotalDebit { get; set; }
+    public decimal TotalCredit { get; set; }
+    public decimal CurrentBalance { get; set; }
+}
+
+public class LedgerReceiptDto
+{
+    public int EntryId { get; set; }
+    public string ShopName { get; set; } = string.Empty;
+    public string StoreName { get; set; } = string.Empty;
+    public string? StoreAddress { get; set; }
+    public string? StoreContact { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string CustomerCode { get; set; } = string.Empty;
+    public string MobileNumber { get; set; } = string.Empty;
+    public string TransactionNumber { get; set; } = string.Empty;
+    public DateTime TransactionDate { get; set; }
+    public string TransactionType { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public decimal Debit { get; set; }
+    public decimal Credit { get; set; }
+    public decimal Balance { get; set; }
+    public string? PaymentMode { get; set; }
+    public string? ReferenceNumber { get; set; }
+    public string ReceivedBy { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
 }
 
 public class CustomerPaymentRequest

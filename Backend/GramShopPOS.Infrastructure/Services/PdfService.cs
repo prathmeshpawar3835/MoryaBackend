@@ -55,7 +55,7 @@ public sealed class PdfService : IPdfService
                         cust.Item().Text("Customer Details").Bold();
                         cust.Item().Text($"Customer Name: {bill.Customer?.Name ?? "Walk-in Customer"}");
                         cust.Item().Text($"Mobile: {bill.Customer?.MobileNumber ?? "—"}");
-                        cust.Item().Text($"Customer Code: {bill.Customer?.ReferralCode ?? "—"}");
+                        cust.Item().Text($"Customer Code: {bill.Customer?.CustomerCode ?? "—"}");
                         if (!string.IsNullOrWhiteSpace(bill.Customer?.Address))
                         {
                             cust.Item().Text($"Address: {bill.Customer.Address}");
@@ -177,7 +177,7 @@ public sealed class PdfService : IPdfService
                 page.Header().Text($"{settings.ShopName} - Customer Ledger").FontSize(16).Bold();
                 page.Content().Column(col =>
                 {
-                    col.Item().Text($"{customer.Name}  |  {customer.MobileNumber}");
+                    col.Item().Text($"{customer.Name}  |  {customer.CustomerCode}  |  {customer.MobileNumber}");
                     col.Item().Text($"Outstanding: {customer.OutstandingBalance:0.00}");
                     col.Item().Table(table =>
                     {
@@ -247,7 +247,7 @@ public sealed class PdfService : IPdfService
                         col.Item().Text($"New product value: {ret.ExchangeBill.GrandTotal:0.00}");
                         col.Item().Text($"Difference / credit adjustment: {(ret.ExchangeBill.GrandTotal - ret.ReturnAmount):0.00}");
                     }
-                    col.Item().Text($"Customer: {ret.Customer?.Name}  {ret.Customer?.MobileNumber}  Code: {ret.Customer?.ReferralCode}");
+                    col.Item().Text($"Customer: {ret.Customer?.Name}  {ret.Customer?.MobileNumber}  Code: {ret.Customer?.CustomerCode}");
                     col.Item().Text($"Store: {ret.Store.StoreName}  Sales Person: {ret.SalesPerson?.FullName}");
                     col.Item().Text($"Date: {ret.ReturnDate:dd-MMM-yyyy HH:mm}");
                     if (ret.DeductionAmount > 0)
@@ -273,6 +273,89 @@ public sealed class PdfService : IPdfService
             });
         }).GeneratePdf();
         return Pdf(bytes, $"{ret.ReturnKind.ToString().ToLowerInvariant()}-{ret.ReturnNumber}.pdf");
+    }
+
+    public async Task<FileDownload> LedgerReceiptPdfAsync(int customerId, int entryId, CancellationToken cancellationToken = default)
+    {
+        var customer = await _db.Customers.AsNoTracking().Include(c => c.Store)
+            .FirstOrDefaultAsync(c => c.Id == customerId && !c.IsDeleted, cancellationToken)
+            ?? throw new NotFoundAppException("Customer not found.");
+        _currentUser.Access().EnsureStoreAccess(customer.StoreId);
+        var entry = await _db.CustomerLedgers.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == entryId && l.CustomerId == customerId, cancellationToken)
+            ?? throw new NotFoundAppException("Ledger transaction not found.");
+        var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
+        var receivedBy = await _db.Users.AsNoTracking().Where(u => u.Id == entry.UserId).Select(u => u.FullName).FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+        string? paymentMode = null;
+        if (entry.ReferenceId.HasValue)
+        {
+            var payment = await _db.Payments.AsNoTracking().FirstOrDefaultAsync(p => p.Id == entry.ReferenceId.Value, cancellationToken);
+            paymentMode = payment?.PaymentMode.ToString();
+        }
+
+        var amount = entry.Debit > 0 ? entry.Debit : entry.Credit;
+        var bytes = ComposeReceipt(
+            settings.ShopName,
+            TitleForLedger(entry.TransactionType),
+            [
+                ("Store", customer.Store?.StoreName ?? string.Empty),
+                ("Store contact", customer.Store?.ContactNumber ?? settings.Mobile ?? string.Empty),
+                ("Customer", customer.Name),
+                ("Customer code", customer.CustomerCode),
+                ("Mobile", customer.MobileNumber),
+                ("Transaction no.", entry.ReferenceNumber ?? $"LED-{entry.Id}"),
+                ("Date & time", entry.TransactionDate.ToString("dd-MMM-yyyy HH:mm")),
+                ("Transaction type", entry.TransactionType.ToString()),
+                ("Amount", amount.ToString("0.00")),
+                ("Debit", entry.Debit.ToString("0.00")),
+                ("Credit", entry.Credit.ToString("0.00")),
+                ("Balance", entry.Balance.ToString("0.00")),
+                ("Payment mode", paymentMode ?? (entry.TransactionType == LedgerTransactionType.WalletRedeem ? "Customer credit" : "—")),
+                ("Reference", entry.ReferenceNumber ?? "—"),
+                ("Received by", receivedBy),
+                ("Description", entry.Description)
+            ],
+            $"ledger-receipt-{entry.Id}.pdf");
+        return bytes;
+    }
+
+    public async Task<FileDownload> RepairReceiptPdfAsync(int jobId, CancellationToken cancellationToken = default)
+    {
+        var job = await _db.RepairJobs.AsNoTracking()
+            .Include(j => j.Store)
+            .Include(j => j.Customer)
+            .Include(j => j.User)
+            .FirstOrDefaultAsync(j => j.Id == jobId && !j.IsDeleted, cancellationToken)
+            ?? throw new NotFoundAppException("Repair / polish job not found.");
+        _currentUser.Access().EnsureStoreAccess(job.StoreId);
+        var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
+        var charge = job.FinalAmount > 0 ? job.FinalAmount : job.EstimatedAmount;
+        var due = Math.Max(0, charge - job.PaidAmount);
+        var title = job.JobType == RepairJobType.Polish ? "Polish Receipt" : "Repair Receipt";
+        return ComposeReceipt(
+            settings.ShopName,
+            $"{title} {job.JobNumber}",
+            [
+                ("Store", job.Store.StoreName),
+                ("Store contact", job.Store.ContactNumber ?? settings.Mobile ?? string.Empty),
+                ("Customer", job.CustomerName),
+                ("Customer code", job.Customer?.CustomerCode ?? "—"),
+                ("Mobile", job.MobileNumber),
+                ("Job number", job.JobNumber),
+                ("Date & time", job.ReceivedDate.ToString("dd-MMM-yyyy HH:mm")),
+                ("Type", job.JobType.ToString()),
+                ("Status", job.Status.ToString()),
+                ("Product", job.ProductName),
+                ("Description", job.ProductDetails ?? job.Notes ?? "—"),
+                ("Estimated amount", job.EstimatedAmount.ToString("0.00")),
+                ("Final amount", charge.ToString("0.00")),
+                ("Paid amount", job.PaidAmount.ToString("0.00")),
+                ("Due amount", due.ToString("0.00")),
+                ("Payment mode", job.PaymentMode?.ToString() ?? "—"),
+                ("Reference", job.PaymentReference ?? "—"),
+                ("Received by", job.User?.FullName ?? string.Empty)
+            ],
+            $"{job.JobType.ToString().ToLowerInvariant()}-{job.JobNumber}.pdf");
     }
 
     public FileDownload SalesReportPdf(SalesReportDto report)
@@ -314,6 +397,53 @@ public sealed class PdfService : IPdfService
             });
         }).GeneratePdf();
         return Pdf(bytes, "inventory-report.pdf");
+    }
+
+    private static string TitleForLedger(LedgerTransactionType type) => type switch
+    {
+        LedgerTransactionType.PaymentReceived => "Payment Receipt",
+        LedgerTransactionType.RepairPayment => "Repair Payment Receipt",
+        LedgerTransactionType.PolishPayment => "Polish Payment Receipt",
+        LedgerTransactionType.RepairCharge => "Repair Charge Receipt",
+        LedgerTransactionType.PolishCharge => "Polish Charge Receipt",
+        LedgerTransactionType.WalletRedeem => "Customer Credit Receipt",
+        LedgerTransactionType.Return => "Return Receipt",
+        LedgerTransactionType.ExchangeAdjustment => "Exchange Receipt",
+        LedgerTransactionType.Buyback => "Buyback Receipt",
+        LedgerTransactionType.Sale => "Sales Receipt",
+        _ => "Transaction Receipt"
+    };
+
+    private static FileDownload ComposeReceipt(string shopName, string title, (string Label, string Value)[] rows, string fileName)
+    {
+        var bytes = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A5);
+                page.Margin(28);
+                page.DefaultTextStyle(x => x.FontSize(10).FontColor(Colors.Grey.Darken4));
+                page.Header().Column(col =>
+                {
+                    col.Item().Text(shopName).FontSize(16).Bold().FontColor(Color.FromHex("0f2744"));
+                    col.Item().PaddingTop(2).Text(title).FontSize(12).Bold().FontColor(Color.FromHex("c9a227"));
+                    col.Item().PaddingTop(6).LineHorizontal(1).LineColor(Color.FromHex("c9a227"));
+                });
+                page.Content().PaddingTop(12).Column(col =>
+                {
+                    foreach (var (label, value) in rows)
+                    {
+                        col.Item().PaddingVertical(2).Row(row =>
+                        {
+                            row.RelativeItem(2).Text(label).FontColor(Colors.Grey.Darken1);
+                            row.RelativeItem(3).Text(value).Bold();
+                        });
+                    }
+                });
+                page.Footer().AlignCenter().Text("Thank you · Gram Shop POS").FontSize(8).FontColor(Colors.Grey.Medium);
+            });
+        }).GeneratePdf();
+        return Pdf(bytes, fileName);
     }
 
     private static FileDownload Pdf(byte[] bytes, string name) => new()

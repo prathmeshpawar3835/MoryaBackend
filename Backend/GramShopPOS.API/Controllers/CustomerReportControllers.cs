@@ -57,6 +57,18 @@ public sealed class CustomersController : ControllerBase
     public async Task<IActionResult> Ledger(int id, [FromQuery] PagedRequest request, CancellationToken cancellationToken) =>
         Ok(await _customers.GetLedgerAsync(id, request, cancellationToken));
 
+    [HttpGet("{id:int}/ledger/summary")]
+    public async Task<IActionResult> LedgerSummary(int id, CancellationToken cancellationToken) =>
+        Ok(await _customers.GetLedgerSummaryAsync(id, cancellationToken));
+
+    [HttpGet("{id:int}/ledger/{entryId:int}/receipt")]
+    public async Task<IActionResult> LedgerReceipt(int id, int entryId, CancellationToken cancellationToken) =>
+        Ok(await _customers.GetLedgerReceiptAsync(id, entryId, cancellationToken));
+
+    [HttpGet("{id:int}/ledger/{entryId:int}/receipt/pdf")]
+    public async Task<IActionResult> LedgerReceiptPdf(int id, int entryId, CancellationToken cancellationToken) =>
+        Ok(await _pdf.LedgerReceiptPdfAsync(id, entryId, cancellationToken));
+
     [HttpGet("{id:int}/ledger/pdf")]
     public async Task<IActionResult> LedgerPdf(int id, CancellationToken cancellationToken) =>
         Ok(await _pdf.LedgerPdfAsync(id, cancellationToken));

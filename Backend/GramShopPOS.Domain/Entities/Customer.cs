@@ -8,6 +8,7 @@ public class Customer : BaseEntity
     public string? Address { get; set; }
     public DateOnly? DateOfBirth { get; set; }
     public string ReferralCode { get; set; } = string.Empty;
+    public string CustomerCode { get; set; } = string.Empty;
     public int? ReferredByCustomerId { get; set; }
     public decimal OutstandingBalance { get; set; }
     public decimal WalletBalance { get; set; }

@@ -156,10 +156,11 @@ public sealed class BillingService : IBillingService
                         OriginalBillId = adj.OriginalBillId,
                         Reason = adj.Reason,
                         SalesPersonId = salesPersonId,
+                        Amount = adj.Amount,
                         Items = adj.Items
                     },
                     adj.Kind,
-                    new ReturnCreateOptions { PostLedger = false },
+                    new ReturnCreateOptions { PostLedger = false, AmountOverride = adj.Amount },
                     cancellationToken));
             }
         }
@@ -198,7 +199,7 @@ public sealed class BillingService : IBillingService
 
             if (customer.WalletBalance < request.WalletRedeemAmount)
             {
-                throw new BusinessAppException("Insufficient wallet balance or wallet was updated concurrently.");
+                throw new ValidationAppException(CreditUsage.OveruseMessage(customer.WalletBalance, request.WalletRedeemAmount));
             }
 
             customer.WalletBalance = Money.Round(customer.WalletBalance - request.WalletRedeemAmount);
@@ -541,7 +542,7 @@ public sealed class BillingService : IBillingService
             CustomerName = customer?.Name,
             CustomerMobile = customer?.MobileNumber,
             CustomerAddress = customer?.Address,
-            CustomerCode = customer?.ReferralCode,
+            CustomerCode = customer?.CustomerCode,
             CustomerDateOfBirth = customer?.DateOfBirth,
             SalesPersonName = bill.SalesPersonName,
             Products = bill.Items,
@@ -741,7 +742,7 @@ public sealed class BillingService : IBillingService
             CustomerId = b.CustomerId,
             CustomerName = b.Customer != null ? b.Customer.Name : null,
             CustomerMobile = b.Customer != null ? b.Customer.MobileNumber : null,
-            CustomerCode = b.Customer != null ? b.Customer.ReferralCode : null,
+            CustomerCode = b.Customer != null ? b.Customer.CustomerCode : null,
             SalesPersonId = b.SalesPersonId,
             SalesPersonName = b.SalesPerson.FullName,
             BillNumber = b.BillNumber,
@@ -900,7 +901,7 @@ public sealed class BillingService : IBillingService
         CustomerId = b.CustomerId,
         CustomerName = b.Customer?.Name,
         CustomerMobile = b.Customer?.MobileNumber,
-        CustomerCode = b.Customer?.ReferralCode,
+        CustomerCode = b.Customer?.CustomerCode,
         SalesPersonId = b.SalesPersonId,
         SalesPersonName = b.SalesPerson?.FullName ?? string.Empty,
         BillNumber = b.BillNumber,

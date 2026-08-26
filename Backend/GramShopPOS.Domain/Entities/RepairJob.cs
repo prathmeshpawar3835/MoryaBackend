@@ -22,6 +22,11 @@ public class RepairJob : BaseEntity
     public DateTime? CompletedDate { get; set; }
     public DateTime? DeliveredDate { get; set; }
     public string? Notes { get; set; }
+    public decimal EstimatedAmount { get; set; }
+    public decimal FinalAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public PaymentMode? PaymentMode { get; set; }
+    public string? PaymentReference { get; set; }
     public int UserId { get; set; }
 
     public Store Store { get; set; } = null!;

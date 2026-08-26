@@ -39,6 +39,13 @@ public class UpdateSettingsRequest : SettingsDto
 {
 }
 
+public class PosBillingRulesDto
+{
+    public decimal ReturnDeductionPercent { get; set; }
+    public decimal ExchangeDeductionPercent { get; set; }
+    public decimal BuybackDeductionPercent { get; set; }
+}
+
 public class TaxSettingDto
 {
     public int Id { get; set; }

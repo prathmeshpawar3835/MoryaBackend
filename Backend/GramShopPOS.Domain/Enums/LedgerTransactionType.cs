@@ -11,5 +11,9 @@ public enum LedgerTransactionType
     ReferralCredit = 7,
     ReferralReversal = 8,
     ExchangeAdjustment = 9,
-    Buyback = 10
+    Buyback = 10,
+    RepairCharge = 11,
+    RepairPayment = 12,
+    PolishCharge = 13,
+    PolishPayment = 14
 }

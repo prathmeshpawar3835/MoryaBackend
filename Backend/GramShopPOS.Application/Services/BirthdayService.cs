@@ -81,7 +81,7 @@ public sealed class BirthdayService : IBirthdayService
             CustomerId = customer.Id,
             CustomerName = customer.Name,
             MobileNumber = customer.MobileNumber,
-            CustomerCode = customer.ReferralCode,
+            CustomerCode = customer.CustomerCode,
             DateOfBirth = customer.DateOfBirth,
             IsBirthdayToday = isBirthday,
             AlreadyRedeemed = redemption is not null,

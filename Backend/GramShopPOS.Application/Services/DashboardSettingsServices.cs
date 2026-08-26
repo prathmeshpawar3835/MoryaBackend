@@ -2,6 +2,7 @@ using GramShopPOS.Application.Common;
 using GramShopPOS.Application.DTOs.Billing;
 using GramShopPOS.Application.DTOs.Inventory;
 using GramShopPOS.Application.DTOs.Reports;
+using GramShopPOS.Application.DTOs.Settings;
 using GramShopPOS.Application.Exceptions;
 using GramShopPOS.Application.Interfaces;
 using GramShopPOS.Domain.Enums;
@@ -183,12 +184,12 @@ public sealed class DashboardService : IDashboardService
             .ToListAsync(cancellationToken);
 
         var topReferrers = await monthRefs
-            .GroupBy(r => new { r.ReferrerCustomerId, r.ReferrerCustomer.Name, r.ReferrerCustomer.ReferralCode })
+            .GroupBy(r => new { r.ReferrerCustomerId, r.ReferrerCustomer.Name, r.ReferrerCustomer.CustomerCode })
             .Select(g => new TopReferrerDto
             {
                 CustomerId = g.Key.ReferrerCustomerId,
                 CustomerName = g.Key.Name,
-                CustomerCode = g.Key.ReferralCode,
+                CustomerCode = g.Key.CustomerCode,
                 ReferralCount = g.Count(),
                 ReferralSales = g.Sum(x => x.SaleAmount),
                 BenefitEarned = g.Sum(x => x.RewardAmount)
@@ -337,6 +338,18 @@ public sealed class SettingsService : ISettingsService
             IsDefault = t.IsDefault
         }).ToListAsync(cancellationToken);
         return Map(s, taxes);
+    }
+
+    public async Task<PosBillingRulesDto> GetPosRulesAsync(CancellationToken cancellationToken = default)
+    {
+        _currentUser.EnsureAuthenticated();
+        var s = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
+        return new PosBillingRulesDto
+        {
+            ReturnDeductionPercent = s.ReturnDeductionPercent,
+            ExchangeDeductionPercent = s.ExchangeDeductionPercent,
+            BuybackDeductionPercent = s.BuybackDeductionPercent
+        };
     }
 
     public async Task<DTOs.Settings.SettingsDto> UpdateAsync(DTOs.Settings.UpdateSettingsRequest request, CancellationToken cancellationToken = default)

@@ -35,7 +35,7 @@ public sealed class CustomerService : ICustomerService
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var s = request.Search.Trim();
-            query = query.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s));
+            query = query.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s) || c.CustomerCode.Contains(s));
         }
 
         var projected = query.OrderBy(c => c.Name).Select(MapExpr());
@@ -100,12 +100,15 @@ public sealed class CustomerService : ICustomerService
             Address = request.Address,
             DateOfBirth = request.DateOfBirth,
             ReferralCode = await UniqueReferralCodeAsync(cancellationToken),
+            CustomerCode = UniqueTempCode(),
             ReferredByCustomerId = referrerId,
             CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         };
         _db.Customers.Add(customer);
+        await _db.SaveChangesAsync(cancellationToken);
+        customer.CustomerCode = FormatCustomerCode(customer.Id);
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.CustomerCreated, nameof(Customer), customer.Id.ToString(), null, customer, storeId, cancellationToken);
         return await GetByIdAsync(customer.Id, cancellationToken);
@@ -145,7 +148,7 @@ public sealed class CustomerService : ICustomerService
         }
 
         var s = query.Trim();
-        return await q.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s))
+        return await q.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s) || c.CustomerCode.Contains(s))
             .OrderBy(c => c.Name)
             .Take(50)
             .Select(MapExpr())
@@ -219,12 +222,92 @@ public sealed class CustomerService : ICustomerService
                 TransactionDate = l.TransactionDate,
                 TransactionType = l.TransactionType,
                 Description = l.Description,
+                ReferenceId = l.ReferenceId,
                 ReferenceNumber = l.ReferenceNumber,
                 Debit = l.Debit,
                 Credit = l.Credit,
                 Balance = l.Balance
             });
         return await query.ToPagedAsync(request, cancellationToken);
+    }
+
+    public async Task<LedgerSummaryDto> GetLedgerSummaryAsync(int id, CancellationToken cancellationToken = default)
+    {
+        await GetByIdAsync(id, cancellationToken);
+        var rows = await _db.CustomerLedgers.AsNoTracking()
+            .Where(l => l.CustomerId == id)
+            .Select(l => new { l.Id, l.Debit, l.Credit, l.Balance })
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return new LedgerSummaryDto();
+        }
+
+        var first = rows.OrderBy(r => r.Id).First();
+        var last = rows.OrderBy(r => r.Id).Last();
+        return new LedgerSummaryDto
+        {
+            OpeningBalance = Money.Round(first.Balance - first.Debit + first.Credit),
+            TotalDebit = Money.Round(rows.Sum(r => r.Debit)),
+            TotalCredit = Money.Round(rows.Sum(r => r.Credit)),
+            CurrentBalance = last.Balance
+        };
+    }
+
+    public async Task<LedgerReceiptDto> GetLedgerReceiptAsync(int customerId, int entryId, CancellationToken cancellationToken = default)
+    {
+        var customer = await _db.Customers.AsNoTracking().Include(c => c.Store)
+            .FirstOrDefaultAsync(c => c.Id == customerId && !c.IsDeleted, cancellationToken)
+            ?? throw new NotFoundAppException("Customer not found.");
+        _currentUser.Access().EnsureStoreAccess(customer.StoreId);
+        var entry = await _db.CustomerLedgers.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == entryId && l.CustomerId == customerId, cancellationToken)
+            ?? throw new NotFoundAppException("Ledger transaction not found.");
+
+        var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
+        var receivedBy = await _db.Users.AsNoTracking()
+            .Where(u => u.Id == entry.UserId)
+            .Select(u => u.FullName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+        string? paymentMode = null;
+        if (entry.ReferenceId.HasValue &&
+            (entry.TransactionType is LedgerTransactionType.PaymentReceived or LedgerTransactionType.RepairPayment or LedgerTransactionType.PolishPayment))
+        {
+            var payment = await _db.Payments.AsNoTracking().FirstOrDefaultAsync(p => p.Id == entry.ReferenceId.Value, cancellationToken);
+            if (payment != null)
+            {
+                paymentMode = payment.PaymentMode.ToString();
+            }
+        }
+
+        if (paymentMode is null && entry.TransactionType == LedgerTransactionType.WalletRedeem)
+        {
+            paymentMode = "Customer credit";
+        }
+
+        var amount = entry.Debit > 0 ? entry.Debit : entry.Credit;
+        return new LedgerReceiptDto
+        {
+            EntryId = entry.Id,
+            ShopName = settings.ShopName,
+            StoreName = customer.Store?.StoreName ?? string.Empty,
+            StoreAddress = customer.Store?.Address,
+            StoreContact = customer.Store?.ContactNumber,
+            CustomerName = customer.Name,
+            CustomerCode = customer.CustomerCode,
+            MobileNumber = customer.MobileNumber,
+            TransactionNumber = entry.ReferenceNumber ?? $"LED-{entry.Id}",
+            TransactionDate = entry.TransactionDate,
+            TransactionType = entry.TransactionType.ToString(),
+            Amount = amount,
+            Debit = entry.Debit,
+            Credit = entry.Credit,
+            Balance = entry.Balance,
+            PaymentMode = paymentMode,
+            ReferenceNumber = entry.ReferenceNumber,
+            ReceivedBy = receivedBy,
+            Description = entry.Description
+        };
     }
 
     public async Task<PaymentDto> ReceivePaymentAsync(int customerId, CustomerPaymentRequest request, CancellationToken cancellationToken = default)
@@ -349,13 +432,14 @@ public sealed class CustomerService : ICustomerService
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId && !c.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Customer not found.");
         _currentUser.Access().EnsureStoreAccess(customer.StoreId);
+        CreditUsage.EnsureWithinBalance(customer.WalletBalance, request.Amount);
 
         var rows = await _db.Customers
             .Where(c => c.Id == customerId && c.WalletBalance >= request.Amount)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.WalletBalance, c => c.WalletBalance - request.Amount), cancellationToken);
         if (rows == 0)
         {
-            throw new BusinessAppException("Insufficient wallet balance or wallet was updated concurrently.");
+            throw new BusinessAppException("Customer credit was updated by another transaction. Please refresh and try again.");
         }
 
         await _db.ReloadTrackedAsync(customer, cancellationToken);
@@ -418,6 +502,10 @@ public sealed class CustomerService : ICustomerService
         return code;
     }
 
+    public static string FormatCustomerCode(int id) => $"CUS{id:000000}";
+
+    private static string UniqueTempCode() => $"T{Guid.NewGuid():N}"[..20];
+
     private static System.Linq.Expressions.Expression<Func<Customer, CustomerDto>> MapExpr()
     {
         var today = BusinessCalendar.Today();
@@ -432,7 +520,7 @@ public sealed class CustomerService : ICustomerService
             DateOfBirth = c.DateOfBirth,
             IsBirthday = c.DateOfBirth != null && c.DateOfBirth.Value.Month == today.Month && c.DateOfBirth.Value.Day == today.Day,
             ReferralCode = c.ReferralCode,
-            CustomerCode = c.ReferralCode,
+            CustomerCode = c.CustomerCode,
             ReferredByCustomerId = c.ReferredByCustomerId,
             ReferredByName = c.ReferredByCustomer != null ? c.ReferredByCustomer.Name : null,
             OutstandingBalance = c.OutstandingBalance,
@@ -454,7 +542,7 @@ public sealed class CustomerService : ICustomerService
         DateOfBirth = c.DateOfBirth,
         IsBirthday = BusinessCalendar.IsBirthdayToday(c.DateOfBirth),
         ReferralCode = c.ReferralCode,
-        CustomerCode = c.ReferralCode,
+        CustomerCode = c.CustomerCode,
         ReferredByCustomerId = c.ReferredByCustomerId,
         ReferredByName = c.ReferredByCustomer?.Name,
         OutstandingBalance = c.OutstandingBalance,

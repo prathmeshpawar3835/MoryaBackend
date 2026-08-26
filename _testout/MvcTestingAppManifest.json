@@ -1,0 +1,6 @@
+{
+  "GramShopPOS.API, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\ABC\\Backend\\Backend\\GramShopPOS.API",
+  "GramShopPOS.Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\ABC\\Backend\\Backend\\GramShopPOS.Application",
+  "GramShopPOS.Domain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\ABC\\Backend\\Backend\\GramShopPOS.Domain",
+  "GramShopPOS.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\ABC\\Backend\\Backend\\GramShopPOS.Infrastructure"
+}

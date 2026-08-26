@@ -327,7 +327,8 @@ public class IntegrationTests
         var customers = new CustomerService(fx.Db, fx.User, new AuditService(fx.Db, fx.User));
         var customerId = fx.Db.Customers.First().Id;
         var act = async () => await customers.RedeemWalletAsync(customerId, new WalletRedeemRequest { StoreId = 1, Amount = 600 });
-        await act.Should().ThrowAsync<BusinessAppException>();
+        var ex = await act.Should().ThrowAsync<ValidationAppException>();
+        ex.Which.Message.Should().Contain("Available customer credit is ₹500.00");
         await customers.RedeemWalletAsync(customerId, new WalletRedeemRequest { StoreId = 1, Amount = 400 });
         (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == customerId)).WalletBalance.Should().Be(100);
     }

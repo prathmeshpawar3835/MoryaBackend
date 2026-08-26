@@ -316,14 +316,23 @@ public sealed class RepairService : IRepairService
             ExpectedDate = j.ExpectedDate,
             CompletedDate = j.CompletedDate,
             DeliveredDate = j.DeliveredDate,
-            Notes = j.Notes
+            Notes = j.Notes,
+            CustomerCode = j.Customer != null ? j.Customer.CustomerCode : null,
+            EstimatedAmount = j.EstimatedAmount,
+            FinalAmount = j.FinalAmount,
+            PaidAmount = j.PaidAmount,
+            DueAmount = Money.Round(Math.Max(0, (j.FinalAmount > 0 ? j.FinalAmount : j.EstimatedAmount) - j.PaidAmount)),
+            PaymentMode = j.PaymentMode,
+            PaymentReference = j.PaymentReference
         });
         return await projected.ToPagedAsync(request, cancellationToken);
     }
 
     public async Task<RepairJobDto> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var job = await _db.RepairJobs.AsNoTracking().Include(j => j.History).ThenInclude(h => h.User)
+        var job = await _db.RepairJobs.AsNoTracking()
+            .Include(j => j.History).ThenInclude(h => h.User)
+            .Include(j => j.Customer)
             .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Repair / polish job not found.");
         _currentUser.Access().EnsureStoreAccess(job.StoreId);
@@ -339,12 +348,18 @@ public sealed class RepairService : IRepairService
             throw new ValidationAppException("Customer name, mobile number and product are required.");
         }
 
+        if (request.EstimatedAmount < 0 || request.FinalAmount < 0 || request.PaidAmount < 0)
+        {
+            throw new ValidationAppException("Repair amounts cannot be negative.");
+        }
+
         if (request.BillId.HasValue)
         {
             var bill = await _db.Bills.Include(b => b.Items).FirstOrDefaultAsync(b => b.Id == request.BillId, cancellationToken)
                 ?? throw new NotFoundAppException("Invoice not found.");
             _currentUser.Access().EnsureStoreAccess(bill.StoreId);
             request.InvoiceNumber ??= bill.BillNumber;
+            request.CustomerId ??= bill.CustomerId;
             if (request.BillItemId.HasValue)
             {
                 var item = bill.Items.FirstOrDefault(i => i.Id == request.BillItemId)
@@ -355,6 +370,23 @@ public sealed class RepairService : IRepairService
                     request.ProductName = item.ProductName;
                 }
             }
+        }
+
+        if (!request.CustomerId.HasValue)
+        {
+            var matched = await _db.Customers.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.MobileNumber == request.MobileNumber.Trim() && !c.IsDeleted, cancellationToken);
+            if (matched != null)
+            {
+                request.CustomerId = matched.Id;
+            }
+        }
+
+        var charge = Money.Round(request.FinalAmount > 0 ? request.FinalAmount : request.EstimatedAmount);
+        var paid = Money.Round(request.PaidAmount);
+        if (paid > charge && charge > 0)
+        {
+            throw new ValidationAppException("Paid amount cannot exceed the repair / polish amount.");
         }
 
         var job = new RepairJob
@@ -375,6 +407,11 @@ public sealed class RepairService : IRepairService
             ReceivedDate = DateTime.UtcNow,
             ExpectedDate = request.ExpectedDate,
             Notes = request.Notes,
+            EstimatedAmount = Money.Round(request.EstimatedAmount),
+            FinalAmount = Money.Round(request.FinalAmount > 0 ? request.FinalAmount : request.EstimatedAmount),
+            PaidAmount = paid,
+            PaymentMode = paid > 0 ? request.PaymentMode : null,
+            PaymentReference = paid > 0 ? request.PaymentReference : null,
             UserId = _currentUser.UserId,
             CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId,
@@ -383,6 +420,14 @@ public sealed class RepairService : IRepairService
         _db.RepairJobs.Add(job);
         await _db.SaveChangesAsync(cancellationToken);
         AddHistory(job, RepairJobStatus.Received, request.Notes);
+        if (charge > 0 && job.CustomerId.HasValue)
+        {
+            await PostRepairLedgerAsync(job, charge, true, cancellationToken);
+        }
+        if (paid > 0 && job.CustomerId.HasValue)
+        {
+            await PostRepairLedgerAsync(job, paid, false, cancellationToken);
+        }
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.RepairJobCreated, nameof(RepairJob), job.Id.ToString(), null, job, storeId, cancellationToken);
         return await GetByIdAsync(job.Id, cancellationToken);
@@ -399,6 +444,22 @@ public sealed class RepairService : IRepairService
         if (!string.IsNullOrWhiteSpace(request.Notes))
         {
             job.Notes = request.Notes;
+        }
+
+        if (request.FinalAmount.HasValue)
+        {
+            if (request.FinalAmount.Value < 0)
+            {
+                throw new ValidationAppException("Final amount cannot be negative.");
+            }
+
+            var previousCharge = Money.Round(job.FinalAmount > 0 ? job.FinalAmount : job.EstimatedAmount);
+            job.FinalAmount = Money.Round(request.FinalAmount.Value);
+            var delta = Money.Round(job.FinalAmount - previousCharge);
+            if (delta != 0 && job.CustomerId.HasValue)
+            {
+                await PostRepairLedgerAsync(job, Math.Abs(delta), delta > 0, cancellationToken);
+            }
         }
 
         if (request.Status == RepairJobStatus.Ready || request.Status == RepairJobStatus.Delivered)
@@ -419,6 +480,98 @@ public sealed class RepairService : IRepairService
         return await GetByIdAsync(id, cancellationToken);
     }
 
+    public async Task<RepairJobDto> CollectPaymentAsync(int id, CollectRepairPaymentRequest request, CancellationToken cancellationToken = default)
+    {
+        _currentUser.EnsureAuthenticated();
+        if (request.Amount <= 0)
+        {
+            throw new ValidationAppException("Payment amount must be greater than zero.");
+        }
+
+        if (request.PaymentMode is PaymentMode.Credit or PaymentMode.Wallet)
+        {
+            throw new ValidationAppException("Repair / polish payment must be Cash, UPI or Card.");
+        }
+
+        var job = await _db.RepairJobs.FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted, cancellationToken)
+            ?? throw new NotFoundAppException("Repair / polish job not found.");
+        _currentUser.Access().EnsureStoreAccess(job.StoreId);
+        var charge = Money.Round(job.FinalAmount > 0 ? job.FinalAmount : job.EstimatedAmount);
+        if (charge <= 0)
+        {
+            throw new ValidationAppException("Set the repair / polish amount before collecting payment.");
+        }
+
+        var due = Money.Round(Math.Max(0, charge - job.PaidAmount));
+        if (request.Amount > due)
+        {
+            throw new ValidationAppException($"Due amount is ₹{due:0.00}. You cannot collect ₹{Money.Round(request.Amount):0.00}.");
+        }
+
+        job.PaidAmount = Money.Round(job.PaidAmount + request.Amount);
+        job.PaymentMode = request.PaymentMode;
+        job.PaymentReference = request.ReferenceNumber;
+        job.UpdatedDate = DateTime.UtcNow;
+        job.UpdatedBy = _currentUser.UserId;
+        if (job.CustomerId.HasValue)
+        {
+            await PostRepairLedgerAsync(job, Money.Round(request.Amount), false, cancellationToken);
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+        return await GetByIdAsync(job.Id, cancellationToken);
+    }
+
+    private async Task PostRepairLedgerAsync(RepairJob job, decimal amount, bool isCharge, CancellationToken cancellationToken)
+    {
+        if (!job.CustomerId.HasValue || amount <= 0)
+        {
+            return;
+        }
+
+        var customer = await _db.Customers.FirstAsync(c => c.Id == job.CustomerId.Value, cancellationToken);
+        var latest = await _db.CustomerLedgers.Where(l => l.CustomerId == customer.Id).OrderByDescending(l => l.Id).Select(l => (decimal?)l.Balance).FirstOrDefaultAsync(cancellationToken) ?? 0;
+        var polish = job.JobType == RepairJobType.Polish;
+        LedgerTransactionType type;
+        string description;
+        decimal debit;
+        decimal credit;
+        decimal balance;
+        if (isCharge)
+        {
+            type = polish ? LedgerTransactionType.PolishCharge : LedgerTransactionType.RepairCharge;
+            description = polish ? $"Polish charge {job.JobNumber}" : $"Repair charge {job.JobNumber}";
+            debit = amount;
+            credit = 0;
+            balance = Money.Round(latest + amount);
+        }
+        else
+        {
+            type = polish ? LedgerTransactionType.PolishPayment : LedgerTransactionType.RepairPayment;
+            description = polish ? $"Polish Payment {job.JobNumber}" : $"Repair Payment {job.JobNumber}";
+            debit = 0;
+            credit = amount;
+            balance = Money.Round(latest - amount);
+        }
+
+        _db.CustomerLedgers.Add(new CustomerLedger
+        {
+            CustomerId = customer.Id,
+            StoreId = job.StoreId,
+            ReferenceId = job.Id,
+            ReferenceNumber = job.JobNumber,
+            Debit = debit,
+            Credit = credit,
+            Balance = balance,
+            TransactionType = type,
+            Description = description,
+            TransactionDate = DateTime.UtcNow,
+            UserId = _currentUser.UserId,
+            CreatedDate = DateTime.UtcNow,
+            IsActive = true
+        });
+        customer.OutstandingBalance = balance;
+    }
+
     private void AddHistory(RepairJob job, RepairJobStatus status, string? notes) =>
         _db.RepairJobHistories.Add(new RepairJobHistory
         {
@@ -430,32 +583,43 @@ public sealed class RepairService : IRepairService
             IsActive = true
         });
 
-    private static RepairJobDto Map(RepairJob j) => new()
+    private static RepairJobDto Map(RepairJob j)
     {
-        Id = j.Id,
-        StoreId = j.StoreId,
-        JobNumber = j.JobNumber,
-        CustomerId = j.CustomerId,
-        CustomerName = j.CustomerName,
-        MobileNumber = j.MobileNumber,
-        BillId = j.BillId,
-        InvoiceNumber = j.InvoiceNumber,
-        ProductId = j.ProductId,
-        ProductName = j.ProductName,
-        ProductDetails = j.ProductDetails,
-        JobType = j.JobType,
-        Status = j.Status,
-        ReceivedDate = j.ReceivedDate,
-        ExpectedDate = j.ExpectedDate,
-        CompletedDate = j.CompletedDate,
-        DeliveredDate = j.DeliveredDate,
-        Notes = j.Notes,
-        History = j.History?.OrderBy(h => h.CreatedDate).Select(h => new RepairJobHistoryDto
+        var charge = j.FinalAmount > 0 ? j.FinalAmount : j.EstimatedAmount;
+        return new RepairJobDto
         {
-            Status = h.Status,
-            Notes = h.Notes,
-            CreatedDate = h.CreatedDate,
-            UserName = h.User?.UserName ?? string.Empty
-        }).ToList() ?? []
-    };
+            Id = j.Id,
+            StoreId = j.StoreId,
+            JobNumber = j.JobNumber,
+            CustomerId = j.CustomerId,
+            CustomerName = j.CustomerName,
+            MobileNumber = j.MobileNumber,
+            BillId = j.BillId,
+            InvoiceNumber = j.InvoiceNumber,
+            ProductId = j.ProductId,
+            ProductName = j.ProductName,
+            ProductDetails = j.ProductDetails,
+            JobType = j.JobType,
+            Status = j.Status,
+            ReceivedDate = j.ReceivedDate,
+            ExpectedDate = j.ExpectedDate,
+            CompletedDate = j.CompletedDate,
+            DeliveredDate = j.DeliveredDate,
+            Notes = j.Notes,
+            CustomerCode = j.Customer?.CustomerCode,
+            EstimatedAmount = j.EstimatedAmount,
+            FinalAmount = j.FinalAmount,
+            PaidAmount = j.PaidAmount,
+            DueAmount = Money.Round(Math.Max(0, charge - j.PaidAmount)),
+            PaymentMode = j.PaymentMode,
+            PaymentReference = j.PaymentReference,
+            History = j.History?.OrderBy(h => h.CreatedDate).Select(h => new RepairJobHistoryDto
+            {
+                Status = h.Status,
+                Notes = h.Notes,
+                CreatedDate = h.CreatedDate,
+                UserName = h.User?.UserName ?? string.Empty
+            }).ToList() ?? []
+        };
+    }
 }

@@ -50,6 +50,7 @@ public sealed class ReturnDocumentService : IReturnDocumentService
         CancellationToken cancellationToken = default)
     {
         options ??= new ReturnCreateOptions();
+        var requestedOverride = options.AmountOverride ?? request.Amount;
         var bill = await _db.Bills.Include(b => b.Items)
             .FirstOrDefaultAsync(b => b.Id == request.OriginalBillId, cancellationToken)
             ?? throw new NotFoundAppException("Original bill not found.");
@@ -145,10 +146,39 @@ public sealed class ReturnDocumentService : IReturnDocumentService
         }
 
         var grossAmount = Money.Round(pendingLines.Sum(l => l.OriginalShare));
+        var calculatedNet = Money.Round(amount);
+        var finalAmount = calculatedNet;
+        if (requestedOverride.HasValue && _currentUser.IsAdmin)
+        {
+            if (requestedOverride.Value < 0)
+            {
+                throw new ValidationAppException("Final amount cannot be negative.");
+            }
+
+            finalAmount = Money.Round(requestedOverride.Value);
+            if (calculatedNet > 0 && pendingLines.Count > 0 && finalAmount != calculatedNet)
+            {
+                var ratio = finalAmount / calculatedNet;
+                decimal allocated = 0;
+                for (var i = 0; i < pendingLines.Count; i++)
+                {
+                    var row = pendingLines[i].Item;
+                    if (i == pendingLines.Count - 1)
+                    {
+                        row.Total = Money.Round(finalAmount - allocated);
+                    }
+                    else
+                    {
+                        row.Total = Money.Round(row.Total * ratio);
+                        allocated += row.Total;
+                    }
+                }
+            }
+        }
         ret.GrossAmount = grossAmount;
         ret.DeductionPercent = deductionPercent;
-        ret.DeductionAmount = AdjustmentDeduction.DeductionOf(grossAmount, deductionPercent);
-        ret.ReturnAmount = Money.Round(amount);
+        ret.DeductionAmount = Money.Round(Math.Max(0, grossAmount - finalAmount));
+        ret.ReturnAmount = finalAmount;
         if (options.PostLedger && bill.CustomerId.HasValue)
         {
             var customer = await _db.Customers.FirstAsync(c => c.Id == bill.CustomerId, cancellationToken);

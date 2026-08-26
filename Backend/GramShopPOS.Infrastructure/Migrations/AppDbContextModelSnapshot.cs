@@ -796,6 +796,11 @@ namespace GramShopPOS.Infrastructure.Migrations
                     b.Property<DateOnly?>("DateOfBirth")
                         .HasColumnType("date");
 
+                    b.Property<string>("CustomerCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -846,6 +851,9 @@ namespace GramShopPOS.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("MobileNumber")
+                        .IsUnique();
+
+                    b.HasIndex("CustomerCode")
                         .IsUnique();
 
                     b.HasIndex("ReferralCode")
@@ -1756,6 +1764,14 @@ namespace GramShopPOS.Infrastructure.Migrations
                     b.Property<DateTime?>("ExpectedDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal>("EstimatedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("FinalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("InvoiceNumber")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -1782,6 +1798,17 @@ namespace GramShopPOS.Infrastructure.Migrations
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("PaidAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("PaymentMode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PaymentReference")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
 
                     b.Property<string>("ProductDetails")
                         .HasMaxLength(500)

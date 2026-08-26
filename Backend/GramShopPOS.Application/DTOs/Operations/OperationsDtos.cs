@@ -79,6 +79,13 @@ public class RepairJobDto
     public DateTime? CompletedDate { get; set; }
     public DateTime? DeliveredDate { get; set; }
     public string? Notes { get; set; }
+    public string? CustomerCode { get; set; }
+    public decimal EstimatedAmount { get; set; }
+    public decimal FinalAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal DueAmount { get; set; }
+    public PaymentMode? PaymentMode { get; set; }
+    public string? PaymentReference { get; set; }
     public IReadOnlyList<RepairJobHistoryDto> History { get; set; } = [];
 }
 
@@ -105,6 +112,11 @@ public class CreateRepairJobRequest
     public RepairJobType JobType { get; set; } = RepairJobType.Repair;
     public DateTime? ExpectedDate { get; set; }
     public string? Notes { get; set; }
+    public decimal EstimatedAmount { get; set; }
+    public decimal FinalAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public PaymentMode? PaymentMode { get; set; }
+    public string? PaymentReference { get; set; }
 }
 
 public class UpdateRepairJobRequest
@@ -112,6 +124,14 @@ public class UpdateRepairJobRequest
     public RepairJobStatus Status { get; set; }
     public DateTime? ExpectedDate { get; set; }
     public string? Notes { get; set; }
+    public decimal? FinalAmount { get; set; }
+}
+
+public class CollectRepairPaymentRequest
+{
+    public decimal Amount { get; set; }
+    public PaymentMode PaymentMode { get; set; }
+    public string? ReferenceNumber { get; set; }
 }
 
 public class SalesPersonOptionDto

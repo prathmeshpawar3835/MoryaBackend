@@ -94,7 +94,7 @@ public class ConcurrencyTests
                 await customers.RedeemWalletAsync(customerId, new WalletRedeemRequest { StoreId = 1, Amount = 400 });
                 return true;
             }
-            catch (BusinessAppException)
+            catch (AppException)
             {
                 return false;
             }
