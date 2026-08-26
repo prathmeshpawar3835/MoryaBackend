@@ -217,6 +217,7 @@ public sealed class PdfService : IPdfService
         var ret = await _db.Returns.AsNoTracking().Include(r => r.Items)
             .Include(r => r.Customer)
             .Include(r => r.SalesPerson)
+            .Include(r => r.User)
             .Include(r => r.Store)
             .Include(r => r.OriginalBill)
             .Include(r => r.ExchangeBill).ThenInclude(b => b!.Items)
@@ -229,50 +230,47 @@ public sealed class PdfService : IPdfService
         {
             ReturnKind.Exchange => "Exchange Receipt",
             ReturnKind.Buyback => "Buyback Receipt",
-            _ => "Return Receipt / Credit Note"
+            _ => "Return Receipt"
         };
-        var bytes = Document.Create(container =>
+        var rows = new List<(string Label, string Value)>
         {
-            container.Page(page =>
+            ("Store", ret.Store.StoreName),
+            ("Store contact", ret.Store.ContactNumber ?? settings.Mobile ?? string.Empty),
+            ("Customer", ret.Customer?.Name ?? "Walk-in"),
+            ("Customer code", ret.Customer?.CustomerCode ?? "—"),
+            ("Mobile", ret.Customer?.MobileNumber ?? "—"),
+            ("Transaction number", ret.ReturnNumber),
+            ("Date and time", ret.ReturnDate.ToString("dd-MMM-yyyy HH:mm")),
+            ("Transaction type", title),
+            ("Original invoice", ret.OriginalBillNumber),
+        };
+        if (ret.AppliedToBill != null) rows.Add(("Applied to sale", ret.AppliedToBill.BillNumber));
+        if (ret.ExchangeBill != null)
+        {
+            rows.Add(("Linked invoice", ret.ExchangeBill.BillNumber));
+            rows.Add(("New product value", ret.ExchangeBill.GrandTotal.ToString("0.00")));
+            rows.Add(("Difference", (ret.ExchangeBill.GrandTotal - ret.ReturnAmount).ToString("0.00")));
+        }
+        rows.Add(("Original value", ret.GrossAmount.ToString("0.00")));
+        if (ret.DeductionAmount > 0)
+        {
+            rows.Add(("Deduction", $"{ret.DeductionPercent:0.##}% / {ret.DeductionAmount:0.00}"));
+        }
+        rows.Add(("Final amount", ret.ReturnAmount.ToString("0.00")));
+        rows.Add(("Payment / adjustment", ret.ReturnKind == ReturnKind.Buyback ? "Buyback payout / ledger credit" : "Adjusted to customer ledger / current sale"));
+        rows.Add(("Received by", ret.SalesPerson?.FullName ?? ret.User?.FullName ?? "—"));
+        foreach (var item in ret.Items)
+        {
+            rows.Add(("Item", $"{item.ProductName} ({item.ProductCode}) × {item.Quantity:0.##} = {item.Total:0.00}"));
+        }
+        if (ret.ExchangeBill?.Items.Count > 0)
+        {
+            foreach (var item in ret.ExchangeBill.Items)
             {
-                page.Margin(30);
-                page.Header().Text($"{settings.ShopName} - {title} {ret.ReturnNumber}").FontSize(16).Bold();
-                page.Content().Column(col =>
-                {
-                    col.Item().Text($"Original Invoice: {ret.OriginalBillNumber}");
-                    if (ret.AppliedToBill != null) col.Item().Text($"Applied to current sale: {ret.AppliedToBill.BillNumber}");
-                    if (ret.ExchangeBill != null)
-                    {
-                        col.Item().Text($"Linked Sale / Exchange Invoice: {ret.ExchangeBill.BillNumber}");
-                        col.Item().Text($"New product value: {ret.ExchangeBill.GrandTotal:0.00}");
-                        col.Item().Text($"Difference / credit adjustment: {(ret.ExchangeBill.GrandTotal - ret.ReturnAmount):0.00}");
-                    }
-                    col.Item().Text($"Customer: {ret.Customer?.Name}  {ret.Customer?.MobileNumber}  Code: {ret.Customer?.CustomerCode}");
-                    col.Item().Text($"Store: {ret.Store.StoreName}  Sales Person: {ret.SalesPerson?.FullName}");
-                    col.Item().Text($"Date: {ret.ReturnDate:dd-MMM-yyyy HH:mm}");
-                    if (ret.DeductionAmount > 0)
-                    {
-                        col.Item().Text($"Original value: {ret.GrossAmount:0.00}");
-                        col.Item().Text($"Admin deduction ({ret.DeductionPercent:0.##}%): -{ret.DeductionAmount:0.00}");
-                    }
-                    col.Item().Text($"Credit / buyback amount: {ret.ReturnAmount:0.00}");
-                    col.Item().Text("Original / returned products:");
-                    foreach (var item in ret.Items)
-                    {
-                        col.Item().Text($"  {item.ProductName}  x {item.Quantity}  = {item.Total:0.00}");
-                    }
-                    if (ret.ExchangeBill?.Items.Count > 0)
-                    {
-                        col.Item().Text("New products:");
-                        foreach (var item in ret.ExchangeBill.Items)
-                        {
-                            col.Item().Text($"  {item.ProductName}  x {item.Quantity}  = {item.Total:0.00}");
-                        }
-                    }
-                });
-            });
-        }).GeneratePdf();
-        return Pdf(bytes, $"{ret.ReturnKind.ToString().ToLowerInvariant()}-{ret.ReturnNumber}.pdf");
+                rows.Add(("New item", $"{item.ProductName} × {item.Quantity:0.##} = {item.Total:0.00}"));
+            }
+        }
+        return ComposeReceipt(settings.ShopName, $"{title} {ret.ReturnNumber}", [.. rows], $"{ret.ReturnKind.ToString().ToLowerInvariant()}-{ret.ReturnNumber}.pdf");
     }
 
     public async Task<FileDownload> LedgerReceiptPdfAsync(int customerId, int entryId, CancellationToken cancellationToken = default)

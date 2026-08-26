@@ -173,6 +173,10 @@ public class ReturnDto
     public string ReturnNumber { get; set; } = string.Empty;
     public DateTime ReturnDate { get; set; }
     public int? CustomerId { get; set; }
+    public string? CustomerName { get; set; }
+    public string? CustomerCode { get; set; }
+    public string? CustomerMobile { get; set; }
+    public string? StoreName { get; set; }
     public decimal ReturnAmount { get; set; }
     public decimal GrossAmount { get; set; }
     public decimal DeductionPercent { get; set; }

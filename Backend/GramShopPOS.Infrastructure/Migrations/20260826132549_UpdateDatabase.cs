@@ -10,87 +10,40 @@ namespace GramShopPOS.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<decimal>(
-                name: "DeductionAmount",
-                table: "Returns",
-                type: "decimal(18,2)",
-                precision: 18,
-                scale: 2,
-                nullable: false,
-                defaultValue: 0m);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "DeductionPercent",
-                table: "Returns",
-                type: "decimal(5,2)",
-                precision: 5,
-                scale: 2,
-                nullable: false,
-                defaultValue: 0m);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "GrossAmount",
-                table: "Returns",
-                type: "decimal(18,2)",
-                precision: 18,
-                scale: 2,
-                nullable: false,
-                defaultValue: 0m);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "BuybackDeductionPercent",
-                table: "BusinessSettings",
-                type: "decimal(5,2)",
-                precision: 5,
-                scale: 2,
-                nullable: false,
-                defaultValue: 0m);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "ExchangeDeductionPercent",
-                table: "BusinessSettings",
-                type: "decimal(5,2)",
-                precision: 5,
-                scale: 2,
-                nullable: false,
-                defaultValue: 0m);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "ReturnDeductionPercent",
-                table: "BusinessSettings",
-                type: "decimal(5,2)",
-                precision: 5,
-                scale: 2,
-                nullable: false,
-                defaultValue: 0m);
+            // Idempotent: these columns exist on the model but were missing from earlier migrations.
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('dbo.Returns', 'DeductionAmount') IS NULL
+    ALTER TABLE [Returns] ADD [DeductionAmount] decimal(18,2) NOT NULL CONSTRAINT [DF_Returns_DeductionAmount] DEFAULT 0;
+IF COL_LENGTH('dbo.Returns', 'DeductionPercent') IS NULL
+    ALTER TABLE [Returns] ADD [DeductionPercent] decimal(5,2) NOT NULL CONSTRAINT [DF_Returns_DeductionPercent] DEFAULT 0;
+IF COL_LENGTH('dbo.Returns', 'GrossAmount') IS NULL
+    ALTER TABLE [Returns] ADD [GrossAmount] decimal(18,2) NOT NULL CONSTRAINT [DF_Returns_GrossAmount] DEFAULT 0;
+IF COL_LENGTH('dbo.BusinessSettings', 'BuybackDeductionPercent') IS NULL
+    ALTER TABLE [BusinessSettings] ADD [BuybackDeductionPercent] decimal(5,2) NOT NULL CONSTRAINT [DF_BusinessSettings_BuybackDeductionPercent] DEFAULT 0;
+IF COL_LENGTH('dbo.BusinessSettings', 'ExchangeDeductionPercent') IS NULL
+    ALTER TABLE [BusinessSettings] ADD [ExchangeDeductionPercent] decimal(5,2) NOT NULL CONSTRAINT [DF_BusinessSettings_ExchangeDeductionPercent] DEFAULT 0;
+IF COL_LENGTH('dbo.BusinessSettings', 'ReturnDeductionPercent') IS NULL
+    ALTER TABLE [BusinessSettings] ADD [ReturnDeductionPercent] decimal(5,2) NOT NULL CONSTRAINT [DF_BusinessSettings_ReturnDeductionPercent] DEFAULT 0;
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "DeductionAmount",
-                table: "Returns");
-
-            migrationBuilder.DropColumn(
-                name: "DeductionPercent",
-                table: "Returns");
-
-            migrationBuilder.DropColumn(
-                name: "GrossAmount",
-                table: "Returns");
-
-            migrationBuilder.DropColumn(
-                name: "BuybackDeductionPercent",
-                table: "BusinessSettings");
-
-            migrationBuilder.DropColumn(
-                name: "ExchangeDeductionPercent",
-                table: "BusinessSettings");
-
-            migrationBuilder.DropColumn(
-                name: "ReturnDeductionPercent",
-                table: "BusinessSettings");
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('dbo.Returns', 'DeductionAmount') IS NOT NULL
+    ALTER TABLE [Returns] DROP COLUMN [DeductionAmount];
+IF COL_LENGTH('dbo.Returns', 'DeductionPercent') IS NOT NULL
+    ALTER TABLE [Returns] DROP COLUMN [DeductionPercent];
+IF COL_LENGTH('dbo.Returns', 'GrossAmount') IS NOT NULL
+    ALTER TABLE [Returns] DROP COLUMN [GrossAmount];
+IF COL_LENGTH('dbo.BusinessSettings', 'BuybackDeductionPercent') IS NOT NULL
+    ALTER TABLE [BusinessSettings] DROP COLUMN [BuybackDeductionPercent];
+IF COL_LENGTH('dbo.BusinessSettings', 'ExchangeDeductionPercent') IS NOT NULL
+    ALTER TABLE [BusinessSettings] DROP COLUMN [ExchangeDeductionPercent];
+IF COL_LENGTH('dbo.BusinessSettings', 'ReturnDeductionPercent') IS NOT NULL
+    ALTER TABLE [BusinessSettings] DROP COLUMN [ReturnDeductionPercent];
+");
         }
     }
 }

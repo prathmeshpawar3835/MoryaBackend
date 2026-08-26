@@ -130,20 +130,32 @@ public sealed class ReturnService : IReturnService
             ReturnNumber = r.ReturnNumber,
             ReturnDate = r.ReturnDate,
             CustomerId = r.CustomerId,
+            CustomerName = r.Customer != null ? r.Customer.Name : null,
+            CustomerCode = r.Customer != null ? r.Customer.CustomerCode : null,
+            CustomerMobile = r.Customer != null ? r.Customer.MobileNumber : null,
+            StoreName = r.Store.StoreName,
             ReturnAmount = r.ReturnAmount,
             GrossAmount = r.GrossAmount,
             DeductionPercent = r.DeductionPercent,
             DeductionAmount = r.DeductionAmount,
             Reason = r.Reason,
             ReturnKind = r.ReturnKind,
-            ExchangeBillId = r.ExchangeBillId
+            ExchangeBillId = r.ExchangeBillId,
+            SalesPersonId = r.SalesPersonId,
+            SalesPersonName = r.SalesPerson != null ? r.SalesPerson.FullName : null
         });
         return await projected.ToPagedAsync(request, cancellationToken);
     }
 
     public async Task<ReturnDto> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var entity = await _db.Returns.AsNoTracking().Include(r => r.Items)
+        var entity = await _db.Returns.AsNoTracking()
+            .Include(r => r.Items)
+            .Include(r => r.Customer)
+            .Include(r => r.Store)
+            .Include(r => r.SalesPerson)
+            .Include(r => r.AppliedToBill)
+            .Include(r => r.ExchangeBill)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken)
             ?? throw new NotFoundAppException("Return not found.");
         _currentUser.Access().EnsureStoreAccess(entity.StoreId);
