@@ -60,6 +60,28 @@ public interface IProductService
     Task<ImportPreviewResponse> PreviewImportAsync(Stream file, string fileName, CancellationToken cancellationToken = default);
     Task<ImportConfirmResponse> ConfirmImportAsync(Guid batchId, CancellationToken cancellationToken = default);
     Task<FileDownload> GetImportTemplateAsync(CancellationToken cancellationToken = default);
+    Task<ProductDto> SetImageAsync(int id, string relativePath, CancellationToken cancellationToken = default);
+}
+
+public interface IProductUnitService
+{
+    Task CreateForStockIncreaseAsync(int productId, int storeId, decimal addedQuantity, CancellationToken cancellationToken = default);
+    Task MarkSoldAsync(int storeId, int productId, decimal quantity, int billItemId, IReadOnlyList<int>? productUnitIds, CancellationToken cancellationToken = default);
+    Task RestoreForBillItemAsync(int billItemId, decimal quantity, ProductUnitStatus restoredStatus, CancellationToken cancellationToken = default);
+    Task RestoreForBillAsync(int billId, CancellationToken cancellationToken = default);
+    Task TransferAsync(int productId, int fromStoreId, int toStoreId, decimal quantity, CancellationToken cancellationToken = default);
+    Task RemoveForStockDecreaseAsync(int productId, int storeId, decimal quantity, CancellationToken cancellationToken = default);
+    Task<ProductDto> LookupAsync(string uniqueNumber, int? storeId, CancellationToken cancellationToken = default);
+    Task<PagedResponse<ProductUnitDto>> GetAsync(ProductUnitListRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProductUnitLabelDto>> GetLabelDataAsync(ProductUnitIdsRequest request, CancellationToken cancellationToken = default);
+}
+
+public interface ILabelDocumentService
+{
+    byte[] QrPng(string uniqueNumber);
+    byte[] BarcodePng(string uniqueNumber);
+    FileDownload QrZip(IReadOnlyList<ProductUnitLabelDto> units);
+    FileDownload TagsPdf(IReadOnlyList<ProductUnitLabelDto> units, decimal widthMm, decimal heightMm);
 }
 
 public interface IInventoryService

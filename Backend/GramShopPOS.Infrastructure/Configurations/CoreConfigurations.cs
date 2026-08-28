@@ -81,6 +81,8 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.ToTable("Categories");
         builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
         builder.HasIndex(x => x.Name);
+        builder.Property(x => x.CodePrefix).HasMaxLength(8);
+        builder.HasIndex(x => x.CodePrefix).IsUnique().HasFilter("[CodePrefix] IS NOT NULL AND [CodePrefix] <> ''");
         builder.HasQueryFilter(x => !x.IsDeleted);
     }
 }
@@ -103,6 +105,9 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(x => x.MRP).Money();
         builder.Property(x => x.TaxPercent).HasPrecision(5, 2);
         builder.Property(x => x.MinimumStockLevel).HasPrecision(18, 3);
+        builder.Property(x => x.ImagePath).HasMaxLength(500);
+        builder.Property(x => x.WeightGrams).HasPrecision(18, 3);
+        builder.Property(x => x.Metal).HasMaxLength(50);
         builder.HasOne(x => x.Category).WithMany(x => x.Products).HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
         builder.HasQueryFilter(x => !x.IsDeleted);
     }
@@ -138,5 +143,30 @@ public sealed class StockMovementConfiguration : IEntityTypeConfiguration<StockM
         builder.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class ProductUnitConfiguration : IEntityTypeConfiguration<ProductUnit>
+{
+    public void Configure(EntityTypeBuilder<ProductUnit> builder)
+    {
+        builder.ToTable("ProductUnits");
+        builder.Property(x => x.UniqueNumber).HasMaxLength(30).IsRequired();
+        builder.HasIndex(x => x.UniqueNumber).IsUnique();
+        builder.HasIndex(x => new { x.ProductId, x.StoreId, x.Status });
+        builder.HasOne(x => x.Product).WithMany(x => x.Units).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.BillItem).WithMany().HasForeignKey(x => x.BillItemId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasQueryFilter(x => !x.IsDeleted);
+    }
+}
+
+public sealed class ProductUnitSequenceConfiguration : IEntityTypeConfiguration<ProductUnitSequence>
+{
+    public void Configure(EntityTypeBuilder<ProductUnitSequence> builder)
+    {
+        builder.ToTable("ProductUnitSequences");
+        builder.Property(x => x.Prefix).HasMaxLength(8).IsRequired();
+        builder.HasIndex(x => x.Prefix).IsUnique();
     }
 }

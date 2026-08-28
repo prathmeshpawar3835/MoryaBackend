@@ -116,6 +116,7 @@ public sealed class ApplicationServiceRegistration
         services.AddScoped<Interfaces.IStoreService, Services.StoreService>();
         services.AddScoped<Interfaces.ICategoryService, Services.CategoryService>();
         services.AddScoped<Interfaces.IProductService, Services.ProductService>();
+        services.AddScoped<Interfaces.IProductUnitService, Services.ProductUnitService>();
         services.AddScoped<Interfaces.IInventoryService, Services.InventoryService>();
         services.AddScoped<Interfaces.IPurchaseService, Services.PurchaseService>();
         services.AddScoped<Interfaces.IBillingService, Services.BillingService>();

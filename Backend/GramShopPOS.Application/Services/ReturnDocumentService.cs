@@ -28,19 +28,22 @@ public sealed class ReturnDocumentService : IReturnDocumentService
     private readonly IStockEngine _stock;
     private readonly IDocumentNumberGenerator _numbers;
     private readonly IReferralService _referrals;
+    private readonly IProductUnitService _units;
 
     public ReturnDocumentService(
         IAppDbContext db,
         ICurrentUser currentUser,
         IStockEngine stock,
         IDocumentNumberGenerator numbers,
-        IReferralService referrals)
+        IReferralService referrals,
+        IProductUnitService? units = null)
     {
         _db = db;
         _currentUser = currentUser;
         _stock = stock;
         _numbers = numbers;
         _referrals = referrals;
+        _units = units ?? new ProductUnitService(_db, _currentUser);
     }
 
     public async Task<ReturnDto> CreateCoreAsync(
@@ -143,6 +146,13 @@ public sealed class ReturnDocumentService : IReturnDocumentService
             pendingLines.Add((row, lineGross));
             var movement = kind == ReturnKind.Exchange ? StockMovementType.Exchange : StockMovementType.Return;
             await _stock.ChangeAsync(bill.StoreId, billItem.ProductId, item.Quantity, movement, ret.Id, returnNumber, request.Reason, true, _currentUser.UserId, cancellationToken);
+            var restored = kind switch
+            {
+                ReturnKind.Exchange => ProductUnitStatus.Exchanged,
+                ReturnKind.Return => ProductUnitStatus.Returned,
+                _ => ProductUnitStatus.Returned
+            };
+            await _units.RestoreForBillItemAsync(billItem.Id, item.Quantity, restored, cancellationToken);
         }
 
         var grossAmount = Money.Round(pendingLines.Sum(l => l.OriginalShare));

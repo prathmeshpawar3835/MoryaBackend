@@ -310,7 +310,7 @@ public sealed class CategoryService : ICategoryService
         return await _db.Categories.AsNoTracking()
             .Where(c => !c.IsDeleted)
             .OrderBy(c => c.Name)
-            .Select(c => new CategoryDto { Id = c.Id, Name = c.Name, Description = c.Description, IsActive = c.IsActive, CreatedDate = c.CreatedDate })
+            .Select(c => new CategoryDto { Id = c.Id, Name = c.Name, CodePrefix = c.CodePrefix, Description = c.Description, IsActive = c.IsActive, CreatedDate = c.CreatedDate })
             .ToListAsync(cancellationToken);
     }
 
@@ -319,7 +319,7 @@ public sealed class CategoryService : ICategoryService
         _currentUser.EnsureAuthenticated();
         var c = await _db.Categories.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Category not found.");
-        return new CategoryDto { Id = c.Id, Name = c.Name, Description = c.Description, IsActive = c.IsActive, CreatedDate = c.CreatedDate };
+        return new CategoryDto { Id = c.Id, Name = c.Name, CodePrefix = c.CodePrefix, Description = c.Description, IsActive = c.IsActive, CreatedDate = c.CreatedDate };
     }
 
     public async Task<CategoryDto> CreateAsync(CreateCategoryRequest request, CancellationToken cancellationToken = default)
@@ -330,9 +330,11 @@ public sealed class CategoryService : ICategoryService
             throw new ConflictAppException("Category name already exists.");
         }
 
+        var prefix = await ResolvePrefixAsync(request.CodePrefix, request.Name, null, cancellationToken);
         var category = new Category
         {
             Name = request.Name.Trim(),
+            CodePrefix = prefix,
             Description = request.Description,
             IsActive = true,
             CreatedDate = DateTime.UtcNow,
@@ -341,7 +343,7 @@ public sealed class CategoryService : ICategoryService
         _db.Categories.Add(category);
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.CategoryCreated, nameof(Category), category.Id.ToString(), null, category, null, cancellationToken);
-        return new CategoryDto { Id = category.Id, Name = category.Name, Description = category.Description, IsActive = true, CreatedDate = category.CreatedDate };
+        return new CategoryDto { Id = category.Id, Name = category.Name, CodePrefix = category.CodePrefix, Description = category.Description, IsActive = true, CreatedDate = category.CreatedDate };
     }
 
     public async Task<CategoryDto> UpdateAsync(int id, UpdateCategoryRequest request, CancellationToken cancellationToken = default)
@@ -350,12 +352,13 @@ public sealed class CategoryService : ICategoryService
         var category = await _db.Categories.FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Category not found.");
         category.Name = request.Name.Trim();
+        category.CodePrefix = await ResolvePrefixAsync(request.CodePrefix, request.Name, id, cancellationToken);
         category.Description = request.Description;
         category.IsActive = request.IsActive;
         category.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.CategoryUpdated, nameof(Category), category.Id.ToString(), null, category, null, cancellationToken);
-        return new CategoryDto { Id = category.Id, Name = category.Name, Description = category.Description, IsActive = category.IsActive, CreatedDate = category.CreatedDate };
+        return new CategoryDto { Id = category.Id, Name = category.Name, CodePrefix = category.CodePrefix, Description = category.Description, IsActive = category.IsActive, CreatedDate = category.CreatedDate };
     }
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
@@ -379,5 +382,30 @@ public sealed class CategoryService : ICategoryService
         category.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.CategoryDeleted, nameof(Category), id.ToString(), null, null, null, cancellationToken);
+    }
+
+    private async Task<string> ResolvePrefixAsync(string? requested, string name, int? id, CancellationToken cancellationToken)
+    {
+        string prefix;
+        try
+        {
+            prefix = string.IsNullOrWhiteSpace(requested)
+                ? CategoryPrefixes.Suggest(name)
+                : CategoryPrefixes.Normalize(requested);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ValidationAppException(ex.Message);
+        }
+
+        var n = 2;
+        var candidate = prefix;
+        while (await _db.Categories.AnyAsync(c => c.CodePrefix == candidate && c.Id != id && !c.IsDeleted, cancellationToken))
+        {
+            candidate = $"{prefix}{n}";
+            n++;
+        }
+
+        return candidate;
     }
 }

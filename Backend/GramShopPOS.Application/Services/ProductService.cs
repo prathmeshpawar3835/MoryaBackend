@@ -19,19 +19,22 @@ public sealed class ProductService : IProductService
     private readonly IAuditService _audit;
     private readonly IStockEngine _stock;
     private readonly IExcelWorkbookService _excel;
+    private readonly IProductUnitService _units;
 
     public ProductService(
         IAppDbContext db,
         ICurrentUser currentUser,
         IAuditService audit,
         IStockEngine stock,
-        IExcelWorkbookService excel)
+        IExcelWorkbookService excel,
+        IProductUnitService? units = null)
     {
         _db = db;
         _currentUser = currentUser;
         _audit = audit;
         _stock = stock;
         _excel = excel;
+        _units = units ?? new ProductUnitService(_db, _currentUser);
     }
 
     public async Task<PagedResponse<ProductDto>> GetAsync(ProductListRequest request, CancellationToken cancellationToken = default)
@@ -52,7 +55,8 @@ public sealed class ProductService : IProductService
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var s = request.Search.Trim();
-            query = query.Where(p => p.ProductCode.Contains(s) || p.ProductName.Contains(s) || (p.Barcode != null && p.Barcode.Contains(s)));
+            query = query.Where(p => p.ProductCode.Contains(s) || p.ProductName.Contains(s) || (p.Barcode != null && p.Barcode.Contains(s))
+                || p.Units.Any(u => !u.IsDeleted && u.UniqueNumber.Contains(s)));
         }
 
         var projected = query.Select(p => new ProductDto
@@ -69,6 +73,10 @@ public sealed class ProductService : IProductService
             MRP = p.MRP,
             TaxPercent = p.TaxPercent,
             MinimumStockLevel = p.MinimumStockLevel,
+            ImagePath = p.ImagePath,
+            ImageUrl = p.ImagePath ?? "/images/default-jewellery.svg",
+            WeightGrams = p.WeightGrams,
+            Metal = p.Metal,
             IsActive = p.IsActive,
             StockQuantity = storeId == null
                 ? p.Inventories.Where(i => !i.IsDeleted).Sum(i => i.Quantity)
@@ -134,6 +142,8 @@ public sealed class ProductService : IProductService
             MRP = Money.Round(request.MRP),
             TaxPercent = request.TaxPercent,
             MinimumStockLevel = request.MinimumStockLevel,
+            WeightGrams = request.WeightGrams,
+            Metal = string.IsNullOrWhiteSpace(request.Metal) ? null : request.Metal.Trim(),
             IsActive = true,
             CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId
@@ -144,6 +154,7 @@ public sealed class ProductService : IProductService
         if (request.OpeningStock > 0 && request.OpeningStockStoreId.HasValue)
         {
             await _stock.ChangeAsync(request.OpeningStockStoreId.Value, product.Id, request.OpeningStock, StockMovementType.OpeningStock, product.Id, product.ProductCode, "Opening stock", false, _currentUser.UserId, cancellationToken);
+            await _units.CreateForStockIncreaseAsync(product.Id, request.OpeningStockStoreId.Value, request.OpeningStock, cancellationToken);
         }
 
         await _audit.LogAsync(AuditActions.ProductCreated, nameof(Product), product.Id.ToString(), null, product, request.OpeningStockStoreId, cancellationToken);
@@ -169,6 +180,8 @@ public sealed class ProductService : IProductService
         product.MRP = Money.Round(request.MRP);
         product.TaxPercent = request.TaxPercent;
         product.MinimumStockLevel = request.MinimumStockLevel;
+        product.WeightGrams = request.WeightGrams;
+        product.Metal = string.IsNullOrWhiteSpace(request.Metal) ? null : request.Metal.Trim();
         product.IsActive = request.IsActive;
         product.UpdatedDate = DateTime.UtcNow;
         product.UpdatedBy = _currentUser.UserId;
@@ -194,10 +207,12 @@ public sealed class ProductService : IProductService
         _currentUser.EnsureAuthenticated();
         int? resolved = storeId.HasValue || !_currentUser.IsAdmin ? _currentUser.Access().ResolveStoreId(storeId) : null;
         var s = query.Trim();
+        var unique = s.ToUpperInvariant();
         var products = await _db.Products.AsNoTracking()
             .Include(p => p.Category)
             .Include(p => p.Inventories)
-            .Where(p => !p.IsDeleted && p.IsActive && (p.ProductCode.Contains(s) || p.ProductName.Contains(s) || (p.Barcode != null && p.Barcode.Contains(s))))
+            .Where(p => !p.IsDeleted && p.IsActive && (p.ProductCode.Contains(s) || p.ProductName.Contains(s) || (p.Barcode != null && p.Barcode.Contains(s))
+                || p.Units.Any(u => !u.IsDeleted && u.UniqueNumber == unique)))
             .OrderBy(p => p.ProductName)
             .Take(50)
             .ToListAsync(cancellationToken);
@@ -207,11 +222,21 @@ public sealed class ProductService : IProductService
     public async Task<ProductDto> GetByBarcodeAsync(string barcode, int? storeId, CancellationToken cancellationToken = default)
     {
         _currentUser.EnsureAuthenticated();
+        var code = barcode.Trim();
+        try
+        {
+            return await _units.LookupAsync(code, storeId, cancellationToken);
+        }
+        catch (NotFoundAppException)
+        {
+            // Fall through to SKU barcode lookup.
+        }
+
         int? resolved = storeId.HasValue || !_currentUser.IsAdmin ? _currentUser.Access().ResolveStoreId(storeId) : null;
         var product = await _db.Products.AsNoTracking()
             .Include(p => p.Category)
             .Include(p => p.Inventories)
-            .FirstOrDefaultAsync(p => p.Barcode == barcode && !p.IsDeleted, cancellationToken)
+            .FirstOrDefaultAsync(p => p.Barcode == code && !p.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Product not found for barcode.");
         return Map(product, resolved);
     }
@@ -304,6 +329,7 @@ public sealed class ProductService : IProductService
             if (row.OpeningStock != 0)
             {
                 await _stock.ChangeAsync(store.Id, product.Id, row.OpeningStock, StockMovementType.OpeningStock, product.Id, product.ProductCode, "Import opening stock", false, _currentUser.UserId, cancellationToken);
+                await _units.CreateForStockIncreaseAsync(product.Id, store.Id, row.OpeningStock, cancellationToken);
                 inventoryUpdated++;
             }
         }
@@ -319,6 +345,18 @@ public sealed class ProductService : IProductService
     {
         _currentUser.EnsureAdmin();
         return Task.FromResult(_excel.CreateProductImportTemplate());
+    }
+
+    public async Task<ProductDto> SetImageAsync(int id, string relativePath, CancellationToken cancellationToken = default)
+    {
+        _currentUser.EnsureAdmin();
+        var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted, cancellationToken)
+            ?? throw new NotFoundAppException("Product not found.");
+        product.ImagePath = relativePath;
+        product.UpdatedDate = DateTime.UtcNow;
+        product.UpdatedBy = _currentUser.UserId;
+        await _db.SaveChangesAsync(cancellationToken);
+        return await GetByIdAsync(id, null, cancellationToken);
     }
 
     private async Task ValidatePricesAsync(int categoryId, string productCode, string? barcode, int? id, decimal purchase, decimal selling, decimal mrp, decimal tax, CancellationToken cancellationToken)
@@ -380,19 +418,100 @@ public sealed class ProductService : IProductService
             var unit = Get("Unit");
             var storeCode = Get("Store Code", "StoreCode");
             var barcode = Get("Barcode");
-            if (string.IsNullOrWhiteSpace(code)) errors.Add("Product Code is required.");
             if (string.IsNullOrWhiteSpace(name)) errors.Add("Product Name is required.");
-            if (string.IsNullOrWhiteSpace(category) || categories.All(c => !c.Name.Equals(category, StringComparison.OrdinalIgnoreCase)))
+            Category? matchedCategory = null;
+            if (string.IsNullOrWhiteSpace(category))
+            {
                 errors.Add("Invalid category.");
+            }
+            else
+            {
+                matchedCategory = categories.FirstOrDefault(c => c.Name.Equals(category, StringComparison.OrdinalIgnoreCase))
+                    ?? categories.FirstOrDefault(c =>
+                        c.Name.StartsWith(category, StringComparison.OrdinalIgnoreCase) ||
+                        category.StartsWith(c.Name, StringComparison.OrdinalIgnoreCase));
+                if (matchedCategory is null)
+                {
+                    errors.Add("Invalid category.");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(storeCode))
+            {
+                storeCode = stores.Count == 1 ? stores[0].StoreCode : stores.FirstOrDefault(s => s.StoreCode == "STORE01")?.StoreCode ?? stores.FirstOrDefault()?.StoreCode ?? string.Empty;
+            }
+
             if (string.IsNullOrWhiteSpace(storeCode) || stores.All(s => !s.StoreCode.Equals(storeCode, StringComparison.OrdinalIgnoreCase)))
                 errors.Add("Invalid store code.");
-            if (!decimal.TryParse(Get("Purchase Price", "PurchasePrice"), out var purchase) || purchase < 0) errors.Add("Invalid purchase price.");
-            if (!decimal.TryParse(Get("Selling Price", "SellingPrice"), out var selling) || selling < 0) errors.Add("Invalid selling price.");
-            if (!decimal.TryParse(Get("MRP"), out var mrp) || mrp < 0) errors.Add("Invalid MRP.");
-            if (!decimal.TryParse(Get("Tax %", "Tax%", "Tax"), out var tax) || tax < 0 || tax > 100) errors.Add("Invalid tax.");
-            if (!decimal.TryParse(Get("Opening Stock", "OpeningStock"), out var opening) || opening < 0) errors.Add("Invalid opening stock.");
+
+            var purchaseText = Get("Purchase Price", "PurchasePrice");
+            var sellingText = Get("Selling Price", "SellingPrice");
+            var mrpText = Get("MRP");
+            if (!decimal.TryParse(sellingText, out var selling) || selling < 0) errors.Add("Invalid selling price.");
+            if (!decimal.TryParse(mrpText, out var mrp) || mrp < 0)
+            {
+                if (decimal.TryParse(sellingText, out var sellAsMrp) && sellAsMrp >= 0)
+                {
+                    mrp = sellAsMrp;
+                }
+                else
+                {
+                    errors.Add("Invalid MRP.");
+                }
+            }
+
+            decimal purchase;
+            if (string.IsNullOrWhiteSpace(purchaseText))
+            {
+                purchase = selling >= 0 ? selling : mrp;
+            }
+            else if (!decimal.TryParse(purchaseText, out purchase) || purchase < 0)
+            {
+                errors.Add("Invalid purchase price.");
+            }
+
+            var taxText = Get("Tax %", "Tax%", "Tax");
+            decimal tax = 3;
+            if (!string.IsNullOrWhiteSpace(taxText) && (!decimal.TryParse(taxText, out tax) || tax < 0 || tax > 100))
+            {
+                errors.Add("Invalid tax.");
+            }
+
+            var openingText = Get("Opening Stock", "OpeningStock", "Quantity", "Qty");
+            decimal opening = 0;
+            if (!string.IsNullOrWhiteSpace(openingText) && (!decimal.TryParse(openingText, out opening) || opening < 0))
+            {
+                errors.Add("Invalid opening stock.");
+            }
+
+            var generatedCode = false;
+            if (string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name) && matchedCategory is not null)
+            {
+                var prefix = string.IsNullOrWhiteSpace(matchedCategory.CodePrefix)
+                    ? CategoryPrefixes.Suggest(matchedCategory.Name)
+                    : matchedCategory.CodePrefix;
+                var slug = new string(name.Where(char.IsLetterOrDigit).Take(8).ToArray()).ToUpperInvariant();
+                if (string.IsNullOrWhiteSpace(slug)) slug = "ITEM";
+                var generated = $"{prefix}-{slug}";
+                var n = 1;
+                var candidate = generated;
+                while (codesInFile.Contains(candidate) || products.Any(p => p.ProductCode.Equals(candidate, StringComparison.OrdinalIgnoreCase)))
+                {
+                    n++;
+                    candidate = $"{generated}-{n}";
+                }
+
+                codesInFile.Add(candidate);
+                code = candidate;
+                generatedCode = true;
+            }
+            else if (string.IsNullOrWhiteSpace(code))
+            {
+                errors.Add("Product Code is required.");
+            }
+
             if (!string.IsNullOrWhiteSpace(unit) && unit.Length > 20) errors.Add("Invalid unit.");
-            if (!string.IsNullOrWhiteSpace(code) && !codesInFile.Add(code)) errors.Add("Duplicate product code in file.");
+            if (!generatedCode && !string.IsNullOrWhiteSpace(code) && !codesInFile.Add(code)) errors.Add("Duplicate product code in file.");
             if (!string.IsNullOrWhiteSpace(barcode))
             {
                 if (!barcodesInFile.Add(barcode)) errors.Add("Duplicate barcode in file.");
@@ -417,7 +536,7 @@ public sealed class ProductService : IProductService
                     RowNumber = preview.RowNumber,
                     ProductCode = code.ToUpperInvariant(),
                     ProductName = name,
-                    CategoryName = categories.First(c => c.Name.Equals(category, StringComparison.OrdinalIgnoreCase)).Name,
+                    CategoryName = matchedCategory!.Name,
                     Unit = string.IsNullOrWhiteSpace(unit) ? "PCS" : unit.ToUpperInvariant(),
                     PurchasePrice = Money.Round(purchase),
                     SellingPrice = Money.Round(selling),
@@ -449,6 +568,10 @@ public sealed class ProductService : IProductService
         MRP = p.MRP,
         TaxPercent = p.TaxPercent,
         MinimumStockLevel = p.MinimumStockLevel,
+        ImagePath = p.ImagePath,
+        ImageUrl = string.IsNullOrWhiteSpace(p.ImagePath) ? "/images/default-jewellery.svg" : p.ImagePath,
+        WeightGrams = p.WeightGrams,
+        Metal = p.Metal,
         IsActive = p.IsActive,
         StockQuantity = storeId == null
             ? p.Inventories.Where(i => !i.IsDeleted).Sum(i => i.Quantity)

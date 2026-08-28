@@ -1067,6 +1067,14 @@
           }
         }
       },
+      "QRCoder/1.6.0": {
+        "runtime": {
+          "lib/net6.0/QRCoder.dll": {
+            "assemblyVersion": "1.6.0.0",
+            "fileVersion": "1.6.0.0"
+          }
+        }
+      },
       "QuestPDF/2025.7.1": {
         "runtime": {
           "lib/net8.0/QuestPDF.dll": {
@@ -1643,6 +1651,7 @@
           "Microsoft.Extensions.Hosting.Abstractions": "9.0.8",
           "Microsoft.Extensions.Http": "9.0.8",
           "Microsoft.Extensions.Options.ConfigurationExtensions": "9.0.8",
+          "QRCoder": "1.6.0",
           "QuestPDF": "2025.7.1",
           "System.IdentityModel.Tokens.Jwt": "8.14.0"
         },
@@ -2157,6 +2166,13 @@
       "sha512": "sha512-YqueG52R/Xej4VVbKuRIodjiAhV0HR/XVbLbNrJhCZnzjnSjgMJ/dCdV0akQQxavX6hp/LC6rqLGLcXeQYU7XA==",
       "path": "mono.texttemplating/3.0.0",
       "hashPath": "mono.texttemplating.3.0.0.nupkg.sha512"
+    },
+    "QRCoder/1.6.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-XmPA81eo+oRxBuyVdswsSkTGTE1d3thfF11Z1PdD7oB56A6HU4G4AAOdySmGRMb/cljwlFTMWUtosGEnwpS6GA==",
+      "path": "qrcoder/1.6.0",
+      "hashPath": "qrcoder.1.6.0.nupkg.sha512"
     },
     "QuestPDF/2025.7.1": {
       "type": "package",

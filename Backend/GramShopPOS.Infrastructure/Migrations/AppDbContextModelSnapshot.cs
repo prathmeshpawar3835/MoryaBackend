@@ -760,6 +760,10 @@ namespace GramShopPOS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("CodePrefix")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
@@ -781,6 +785,10 @@ namespace GramShopPOS.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CodePrefix")
+                        .IsUnique()
+                        .HasFilter("[CodePrefix] IS NOT NULL AND [CodePrefix] <> ''");
 
                     b.HasIndex("Name");
 
@@ -1286,6 +1294,18 @@ namespace GramShopPOS.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<string>("ImagePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Metal")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal?>("WeightGrams")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
                     b.Property<int?>("UpdatedBy")
                         .HasColumnType("int");
 
@@ -1467,6 +1487,105 @@ namespace GramShopPOS.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Returns", (string)null);
+                });
+
+            modelBuilder.Entity("GramShopPOS.Domain.Entities.ProductUnit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("BillItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StoreId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UniqueNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BillItemId");
+
+                    b.HasIndex("StoreId");
+
+                    b.HasIndex("UniqueNumber")
+                        .IsUnique();
+
+                    b.HasIndex("ProductId", "StoreId", "Status");
+
+                    b.ToTable("ProductUnits", (string)null);
+                });
+
+            modelBuilder.Entity("GramShopPOS.Domain.Entities.ProductUnitSequence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("LastNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Prefix")
+                        .IsUnique();
+
+                    b.ToTable("ProductUnitSequences", (string)null);
                 });
 
             modelBuilder.Entity("GramShopPOS.Domain.Entities.Purchase", b =>
@@ -3053,6 +3172,32 @@ namespace GramShopPOS.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("GramShopPOS.Domain.Entities.ProductUnit", b =>
+                {
+                    b.HasOne("GramShopPOS.Domain.Entities.BillItem", "BillItem")
+                        .WithMany()
+                        .HasForeignKey("BillItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("GramShopPOS.Domain.Entities.Product", "Product")
+                        .WithMany("Units")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GramShopPOS.Domain.Entities.Store", "Store")
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BillItem");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Store");
+                });
+
             modelBuilder.Entity("GramShopPOS.Domain.Entities.Purchase", b =>
                 {
                     b.HasOne("GramShopPOS.Domain.Entities.Store", "Store")
@@ -3473,6 +3618,8 @@ namespace GramShopPOS.Infrastructure.Migrations
             modelBuilder.Entity("GramShopPOS.Domain.Entities.Product", b =>
                 {
                     b.Navigation("Inventories");
+
+                    b.Navigation("Units");
                 });
 
             modelBuilder.Entity("GramShopPOS.Domain.Entities.ProductReturn", b =>

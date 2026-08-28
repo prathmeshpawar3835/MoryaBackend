@@ -85,9 +85,9 @@ public sealed class DatabaseSeeder
         if (!await _db.Categories.AnyAsync(cancellationToken))
         {
             _db.Categories.AddRange(
-                new Category { Name = "Chains", Description = "Gold chains", IsActive = true, CreatedDate = DateTime.UtcNow },
-                new Category { Name = "Rings", Description = "Gold rings", IsActive = true, CreatedDate = DateTime.UtcNow },
-                new Category { Name = "Earrings", Description = "Gold earrings", IsActive = true, CreatedDate = DateTime.UtcNow });
+                new Category { Name = "Chains", CodePrefix = "CHN", Description = "Gold chains", IsActive = true, CreatedDate = DateTime.UtcNow },
+                new Category { Name = "Rings", CodePrefix = "RNG", Description = "Gold rings", IsActive = true, CreatedDate = DateTime.UtcNow },
+                new Category { Name = "Earrings", CodePrefix = "ERG", Description = "Gold earrings", IsActive = true, CreatedDate = DateTime.UtcNow });
             await _db.SaveChangesAsync(cancellationToken);
         }
 
@@ -192,6 +192,96 @@ public sealed class DatabaseSeeder
             });
         }
 
+        await EnsureCategoryPrefixesAndUnitsAsync(cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnsureCategoryPrefixesAndUnitsAsync(CancellationToken cancellationToken)
+    {
+        var categories = await _db.Categories.Where(c => !c.IsDeleted).ToListAsync(cancellationToken);
+        foreach (var category in categories.Where(c => string.IsNullOrWhiteSpace(c.CodePrefix)))
+        {
+            var suggested = CategoryPrefixes.Suggest(category.Name);
+            var prefix = suggested;
+            var n = 2;
+            while (categories.Any(c => c.Id != category.Id && c.CodePrefix == prefix))
+            {
+                prefix = $"{suggested}{n}";
+                n++;
+            }
+
+            category.CodePrefix = prefix;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var inventories = await _db.Inventories.AsNoTracking()
+            .Include(i => i.Product).ThenInclude(p => p.Category)
+            .Where(i => !i.IsDeleted && i.Quantity > 0)
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in inventories.GroupBy(i => new { i.ProductId, i.StoreId }))
+        {
+            var sample = group.First();
+            if (!PieceCountCompatible(sample.Product.Unit, sample.Quantity, out var needed) || needed == 0)
+            {
+                continue;
+            }
+
+            var existing = await _db.ProductUnits.CountAsync(
+                u => u.ProductId == sample.ProductId && u.StoreId == sample.StoreId && !u.IsDeleted && u.Status != ProductUnitStatus.Removed,
+                cancellationToken);
+            var missing = needed - existing;
+            if (missing <= 0)
+            {
+                continue;
+            }
+
+            var prefix = string.IsNullOrWhiteSpace(sample.Product.Category.CodePrefix)
+                ? CategoryPrefixes.Suggest(sample.Product.Category.Name)
+                : sample.Product.Category.CodePrefix!;
+            var seq = await _db.ProductUnitSequences.FirstOrDefaultAsync(s => s.Prefix == prefix, cancellationToken);
+            if (seq is null)
+            {
+                seq = new ProductUnitSequence { Prefix = prefix, LastNumber = 0, CreatedDate = DateTime.UtcNow, IsActive = true };
+                _db.ProductUnitSequences.Add(seq);
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
+            var start = seq.LastNumber + 1;
+            seq.LastNumber += missing;
+            for (var i = 0; i < missing; i++)
+            {
+                _db.ProductUnits.Add(new ProductUnit
+                {
+                    ProductId = sample.ProductId,
+                    StoreId = sample.StoreId,
+                    UniqueNumber = $"{prefix}-{(start + i):000000}",
+                    Status = ProductUnitStatus.Available,
+                    CreatedDate = DateTime.UtcNow,
+                    IsActive = true
+                });
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static bool PieceCountCompatible(string? unit, decimal quantity, out int count)
+    {
+        count = 0;
+        var u = (unit ?? "PCS").Trim().ToUpperInvariant();
+        if (u is not ("PCS" or "PC" or "PIECE" or "PIECES" or "NOS" or "NO"))
+        {
+            return false;
+        }
+
+        if (quantity <= 0 || quantity != Math.Truncate(quantity) || quantity > 100_000)
+        {
+            return false;
+        }
+
+        count = (int)quantity;
+        return true;
     }
 }

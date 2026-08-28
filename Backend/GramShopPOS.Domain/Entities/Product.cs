@@ -12,7 +12,11 @@ public class Product : BaseEntity
     public decimal MRP { get; set; }
     public decimal TaxPercent { get; set; }
     public decimal MinimumStockLevel { get; set; }
+    public string? ImagePath { get; set; }
+    public decimal? WeightGrams { get; set; }
+    public string? Metal { get; set; }
 
     public Category Category { get; set; } = null!;
     public ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();
+    public ICollection<ProductUnit> Units { get; set; } = new List<ProductUnit>();
 }

@@ -14,6 +14,8 @@ public interface IAppDbContext
     DbSet<StoreUser> StoreUsers { get; }
     DbSet<Category> Categories { get; }
     DbSet<Product> Products { get; }
+    DbSet<ProductUnit> ProductUnits { get; }
+    DbSet<ProductUnitSequence> ProductUnitSequences { get; }
     DbSet<Inventory> Inventories { get; }
     DbSet<StockMovement> StockMovements { get; }
     DbSet<StockTransfer> StockTransfers { get; }

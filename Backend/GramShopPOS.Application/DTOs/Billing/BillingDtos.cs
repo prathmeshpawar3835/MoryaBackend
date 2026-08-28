@@ -25,6 +25,7 @@ public class CreateBillItemRequest
     public int ProductId { get; set; }
     public decimal Quantity { get; set; }
     public decimal DiscountAmount { get; set; }
+    public IReadOnlyList<int>? ProductUnitIds { get; set; }
 }
 
 public class CreatePaymentRequest

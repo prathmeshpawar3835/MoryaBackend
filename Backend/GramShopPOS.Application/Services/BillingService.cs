@@ -20,6 +20,7 @@ public sealed class BillingService : IBillingService
     private readonly IReferralService _referrals;
     private readonly IReturnDocumentService _returns;
     private readonly IBirthdayService _birthdays;
+    private readonly IProductUnitService _units;
 
     public BillingService(
         IAppDbContext db,
@@ -29,7 +30,8 @@ public sealed class BillingService : IBillingService
         IAuditService audit,
         IReferralService referrals,
         IReturnDocumentService returns,
-        IBirthdayService birthdays)
+        IBirthdayService birthdays,
+        IProductUnitService? units = null)
     {
         _db = db;
         _currentUser = currentUser;
@@ -39,6 +41,7 @@ public sealed class BillingService : IBillingService
         _referrals = referrals;
         _returns = returns;
         _birthdays = birthdays;
+        _units = units ?? new ProductUnitService(_db, _currentUser);
     }
 
     public async Task<BillDto> CreateBillAsync(CreateBillRequest request, CancellationToken cancellationToken = default)
@@ -277,7 +280,7 @@ public sealed class BillingService : IBillingService
         {
             var src = lineInputs[i];
             var calc = totals.Lines[i];
-            _db.BillItems.Add(new BillItem
+            var billItem = new BillItem
             {
                 BillId = bill.Id,
                 ProductId = src.Product.Id,
@@ -292,7 +295,8 @@ public sealed class BillingService : IBillingService
                 Total = calc.Total,
                 CreatedDate = DateTime.UtcNow,
                 IsActive = true
-            });
+            };
+            _db.BillItems.Add(billItem);
             await _stock.ChangeAsync(
                 storeId,
                 src.Product.Id,
@@ -304,6 +308,7 @@ public sealed class BillingService : IBillingService
                 settings.AllowNegativeStock,
                 _currentUser.UserId,
                 cancellationToken);
+            await _units.MarkSoldAsync(storeId, src.Product.Id, calc.Quantity, billItem.Id, src.Request.ProductUnitIds, cancellationToken);
         }
 
         foreach (var payment in collected.Where(p => p.Amount > 0))
@@ -474,6 +479,8 @@ public sealed class BillingService : IBillingService
         {
             await _stock.ChangeAsync(bill.StoreId, item.ProductId, item.Quantity, StockMovementType.Return, bill.Id, bill.BillNumber, reason ?? "Bill cancelled", true, _currentUser.UserId, cancellationToken);
         }
+
+        await _units.RestoreForBillAsync(bill.Id, cancellationToken);
 
         if (bill.CustomerId.HasValue)
         {

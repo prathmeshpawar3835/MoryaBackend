@@ -12,7 +12,13 @@ namespace GramShopPOS.API.Controllers;
 public sealed class ProductsController : ControllerBase
 {
     private readonly IProductService _products;
-    public ProductsController(IProductService products) => _products = products;
+    private readonly IWebHostEnvironment _environment;
+
+    public ProductsController(IProductService products, IWebHostEnvironment environment)
+    {
+        _products = products;
+        _environment = environment;
+    }
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] ProductListRequest request, CancellationToken cancellationToken) =>
@@ -66,4 +72,32 @@ public sealed class ProductsController : ControllerBase
     [HttpGet("import/template")]
     public async Task<IActionResult> Template(CancellationToken cancellationToken) =>
         Ok(await _products.GetImportTemplateAsync(cancellationToken));
+
+    [Authorize(Roles = Roles.Admin)]
+    [HttpPost("{id:int}/image")]
+    [RequestSizeLimit(2_000_000)]
+    public async Task<IActionResult> UploadImage(int id, IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest("An image file is required.");
+        }
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp" or ".svg"))
+        {
+            return BadRequest("Upload a JPG, PNG, WEBP, or SVG image.");
+        }
+
+        var folder = Path.Combine(_environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot"), "uploads", "products");
+        Directory.CreateDirectory(folder);
+        var fileName = $"{id}{ext}";
+        var path = Path.Combine(folder, fileName);
+        await using (var stream = System.IO.File.Create(path))
+        {
+            await file.CopyToAsync(stream, cancellationToken);
+        }
+
+        return Ok(await _products.SetImageAsync(id, $"/uploads/products/{fileName}", cancellationToken));
+    }
 }

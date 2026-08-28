@@ -15,13 +15,15 @@ public sealed class InventoryService : IInventoryService
     private readonly ICurrentUser _currentUser;
     private readonly IStockEngine _stock;
     private readonly IAuditService _audit;
+    private readonly IProductUnitService _units;
 
-    public InventoryService(IAppDbContext db, ICurrentUser currentUser, IStockEngine stock, IAuditService audit)
+    public InventoryService(IAppDbContext db, ICurrentUser currentUser, IStockEngine stock, IAuditService audit, IProductUnitService? units = null)
     {
         _db = db;
         _currentUser = currentUser;
         _stock = stock;
         _audit = audit;
+        _units = units ?? new ProductUnitService(_db, _currentUser);
     }
 
     public async Task<PagedResponse<InventoryDto>> GetAsync(InventoryListRequest request, CancellationToken cancellationToken = default)
@@ -154,6 +156,7 @@ public sealed class InventoryService : IInventoryService
 
         await using var tx = await _db.BeginTransactionAsync(cancellationToken);
         await _stock.ChangeAsync(request.StoreId, request.ProductId, request.Quantity, StockMovementType.Purchase, null, request.InvoiceNumber, request.Reason ?? "Stock in", false, _currentUser.UserId, cancellationToken);
+        await _units.CreateForStockIncreaseAsync(request.ProductId, request.StoreId, request.Quantity, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.StockIn, nameof(Inventory), request.ProductId.ToString(), null, request, request.StoreId, cancellationToken);
     }
@@ -177,6 +180,14 @@ public sealed class InventoryService : IInventoryService
         var type = request.IsIncrease ? StockMovementType.AdjustmentIn : StockMovementType.AdjustmentOut;
         await using var tx = await _db.BeginTransactionAsync(cancellationToken);
         await _stock.ChangeAsync(request.StoreId, request.ProductId, delta, type, null, null, request.Reason, settings.AllowNegativeStock, _currentUser.UserId, cancellationToken);
+        if (request.IsIncrease)
+        {
+            await _units.CreateForStockIncreaseAsync(request.ProductId, request.StoreId, request.Quantity, cancellationToken);
+        }
+        else
+        {
+            await _units.RemoveForStockDecreaseAsync(request.ProductId, request.StoreId, request.Quantity, cancellationToken);
+        }
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.StockAdjusted, nameof(Inventory), request.ProductId.ToString(), null, request, request.StoreId, cancellationToken);
     }
@@ -224,6 +235,7 @@ public sealed class InventoryService : IInventoryService
             });
             await _stock.ChangeAsync(request.FromStoreId, item.ProductId, -item.Quantity, StockMovementType.TransferOut, transfer.Id, transfer.TransferNumber, request.Reason, settings.AllowNegativeStock, _currentUser.UserId, cancellationToken);
             await _stock.ChangeAsync(request.ToStoreId, item.ProductId, item.Quantity, StockMovementType.TransferIn, transfer.Id, transfer.TransferNumber, request.Reason, false, _currentUser.UserId, cancellationToken);
+            await _units.TransferAsync(item.ProductId, request.FromStoreId, request.ToStoreId, item.Quantity, cancellationToken);
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -243,13 +255,15 @@ public sealed class PurchaseService : IPurchaseService
     private readonly ICurrentUser _currentUser;
     private readonly IStockEngine _stock;
     private readonly IAuditService _audit;
+    private readonly IProductUnitService _units;
 
-    public PurchaseService(IAppDbContext db, ICurrentUser currentUser, IStockEngine stock, IAuditService audit)
+    public PurchaseService(IAppDbContext db, ICurrentUser currentUser, IStockEngine stock, IAuditService audit, IProductUnitService? units = null)
     {
         _db = db;
         _currentUser = currentUser;
         _stock = stock;
         _audit = audit;
+        _units = units ?? new ProductUnitService(_db, _currentUser);
     }
 
     public async Task<PagedResponse<PurchaseDto>> GetAsync(PagedRequest request, CancellationToken cancellationToken = default)
@@ -366,6 +380,7 @@ public sealed class PurchaseService : IPurchaseService
                 IsActive = true
             });
             await _stock.ChangeAsync(request.StoreId, item.ProductId, item.Quantity, StockMovementType.Purchase, purchase.Id, purchase.InvoiceNumber, "Purchase stock-in", false, _currentUser.UserId, cancellationToken);
+            await _units.CreateForStockIncreaseAsync(item.ProductId, request.StoreId, item.Quantity, cancellationToken);
         }
 
         purchase.Total = Money.Round(total);

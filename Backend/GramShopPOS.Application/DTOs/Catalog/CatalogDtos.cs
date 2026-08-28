@@ -1,9 +1,12 @@
+using GramShopPOS.Domain.Enums;
+
 namespace GramShopPOS.Application.DTOs.Catalog;
 
 public class CategoryDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? CodePrefix { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedDate { get; set; }
@@ -12,6 +15,7 @@ public class CategoryDto
 public class CreateCategoryRequest
 {
     public string Name { get; set; } = string.Empty;
+    public string? CodePrefix { get; set; }
     public string? Description { get; set; }
 }
 
@@ -34,9 +38,16 @@ public class ProductDto
     public decimal MRP { get; set; }
     public decimal TaxPercent { get; set; }
     public decimal MinimumStockLevel { get; set; }
+    public string? ImagePath { get; set; }
+    public string ImageUrl { get; set; } = "/images/default-jewellery.svg";
+    public decimal? WeightGrams { get; set; }
+    public string? Metal { get; set; }
     public bool IsActive { get; set; }
     public decimal? StockQuantity { get; set; }
     public bool IsLowStock { get; set; }
+    public int? ProductUnitId { get; set; }
+    public string? UniqueNumber { get; set; }
+    public ProductUnitStatus? ProductUnitStatus { get; set; }
 }
 
 public class CreateProductRequest
@@ -51,6 +62,8 @@ public class CreateProductRequest
     public decimal MRP { get; set; }
     public decimal TaxPercent { get; set; }
     public decimal MinimumStockLevel { get; set; }
+    public decimal? WeightGrams { get; set; }
+    public string? Metal { get; set; }
     public int? OpeningStockStoreId { get; set; }
     public decimal OpeningStock { get; set; }
 }
@@ -66,6 +79,8 @@ public class UpdateProductRequest
     public decimal MRP { get; set; }
     public decimal TaxPercent { get; set; }
     public decimal MinimumStockLevel { get; set; }
+    public decimal? WeightGrams { get; set; }
+    public string? Metal { get; set; }
     public bool IsActive { get; set; } = true;
 }
 

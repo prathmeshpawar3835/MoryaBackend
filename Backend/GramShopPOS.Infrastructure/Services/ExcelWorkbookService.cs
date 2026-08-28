@@ -16,7 +16,7 @@ public sealed class ExcelWorkbookService : IExcelWorkbookService
         var headers = new[]
         {
             "Product Code", "Product Name", "Category", "Unit", "Purchase Price", "Selling Price",
-            "MRP", "Tax %", "Opening Stock", "Store Code", "Barcode"
+            "MRP", "Tax %", "Opening Stock", "Store Code", "Barcode", "Quantity"
         };
         for (var i = 0; i < headers.Length; i++)
         {
@@ -35,6 +35,13 @@ public sealed class ExcelWorkbookService : IExcelWorkbookService
         sheet.Cell(2, 9).Value = 10;
         sheet.Cell(2, 10).Value = "STORE01";
         sheet.Cell(2, 11).Value = "890000000001";
+        sheet.Cell(2, 12).Value = 10;
+        sheet.Cell(3, 1).Value = "";
+        sheet.Cell(3, 2).Value = "Gold Ring";
+        sheet.Cell(3, 3).Value = "Ring";
+        sheet.Cell(3, 6).Value = 22500;
+        sheet.Cell(3, 7).Value = 25000;
+        sheet.Cell(3, 12).Value = 10;
         sheet.Columns().AdjustToContents();
         return ToDownload(workbook, "product-import-template.xlsx");
     }

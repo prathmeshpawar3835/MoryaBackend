@@ -18,6 +18,8 @@ public sealed class AppDbContext : DbContext, IAppDbContext
     public DbSet<StoreUser> StoreUsers => Set<StoreUser>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductUnit> ProductUnits => Set<ProductUnit>();
+    public DbSet<ProductUnitSequence> ProductUnitSequences => Set<ProductUnitSequence>();
     public DbSet<Inventory> Inventories => Set<Inventory>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
