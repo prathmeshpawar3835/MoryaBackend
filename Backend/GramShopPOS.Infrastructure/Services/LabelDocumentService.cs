@@ -19,10 +19,16 @@ public sealed class LabelDocumentService : ILabelDocumentService
 
     public byte[] QrPng(string uniqueNumber)
     {
+        var payload = (uniqueNumber ?? string.Empty).Trim().ToUpperInvariant();
+        if (payload.Length == 0)
+        {
+            throw new ArgumentException("Unique number is required to generate a QR code.", nameof(uniqueNumber));
+        }
+
         using var generator = new QRCodeGenerator();
-        using var data = generator.CreateQrCode(uniqueNumber, QRCodeGenerator.ECCLevel.M);
-        var png = new PngByteQRCode(data);
-        return png.GetGraphic(8);
+        using var data = generator.CreateQrCode(payload, QRCodeGenerator.ECCLevel.M);
+        using var png = new PngByteQRCode(data);
+        return png.GetGraphic(20, true);
     }
 
     public byte[] BarcodePng(string uniqueNumber)

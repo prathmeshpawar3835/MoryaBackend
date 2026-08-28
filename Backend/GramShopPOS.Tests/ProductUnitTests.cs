@@ -80,4 +80,16 @@ public class ProductUnitTests
         var sold = async () => await products.GetByBarcodeAsync("RNG-000001", 1);
         await sold.Should().ThrowAsync<BusinessAppException>().WithMessage("*sold*");
     }
+
+    [Fact]
+    public void Qr_png_is_a_valid_png_image()
+    {
+        var labels = new LabelDocumentService();
+        var bytes = labels.QrPng("RNG-000001");
+        bytes.Length.Should().BeGreaterThan(100);
+        bytes[0].Should().Be(0x89);
+        bytes[1].Should().Be((byte)'P');
+        bytes[2].Should().Be((byte)'N');
+        bytes[3].Should().Be((byte)'G');
+    }
 }
