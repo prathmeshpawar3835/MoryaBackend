@@ -74,6 +74,7 @@ public interface IProductUnitService
     Task<ProductDto> LookupAsync(string uniqueNumber, int? storeId, CancellationToken cancellationToken = default);
     Task<PagedResponse<ProductUnitDto>> GetAsync(ProductUnitListRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProductUnitLabelDto>> GetLabelDataAsync(ProductUnitIdsRequest request, CancellationToken cancellationToken = default);
+    Task<ProductUnitDto> UpdatePricesAsync(int id, UpdateProductUnitRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface ILabelDocumentService

@@ -100,7 +100,8 @@ public sealed class BillingService : IBillingService
             }
 
             var product = products.First(p => p.Id == item.ProductId);
-            lineInputs.Add((item.Quantity, product.SellingPrice, item.DiscountAmount, product.TaxPercent, product, item));
+            var rate = await ResolveSellingPriceAsync(storeId, product, item, cancellationToken);
+            lineInputs.Add((item.Quantity, rate, item.DiscountAmount, product.TaxPercent, product, item));
         }
 
         var eligible = Money.Round(lineInputs.Sum(l => (l.Qty * l.Rate) - l.Discount));
@@ -987,4 +988,58 @@ public sealed class BillingService : IBillingService
         CreatedDate = h.CreatedDate,
         Items = JsonSerializer.Deserialize<List<CreateBillItemRequest>>(h.ItemsJson) ?? []
     };
+
+    private async Task<decimal> ResolveSellingPriceAsync(
+        int storeId,
+        Product product,
+        CreateBillItemRequest item,
+        CancellationToken cancellationToken)
+    {
+        if (item.ProductUnitIds is { Count: > 0 })
+        {
+            var ids = item.ProductUnitIds.Distinct().ToList();
+            var units = await _db.ProductUnits.AsNoTracking()
+                .Where(u => ids.Contains(u.Id) && !u.IsDeleted)
+                .ToListAsync(cancellationToken);
+            if (units.Count != ids.Count)
+            {
+                throw new NotFoundAppException("One or more scanned pieces were not found.");
+            }
+
+            var scannedRates = units
+                .Select(u => Money.Round(u.SellingPrice ?? product.SellingPrice))
+                .Distinct()
+                .ToList();
+            if (scannedRates.Count > 1)
+            {
+                throw new ValidationAppException(
+                    "These pieces have different selling prices. Add each tagged piece as its own line.");
+            }
+
+            return scannedRates[0];
+        }
+
+        var availableRates = await _db.ProductUnits.AsNoTracking()
+            .Where(u => u.ProductId == product.Id
+                        && u.StoreId == storeId
+                        && !u.IsDeleted
+                        && (u.Status == ProductUnitStatus.Available
+                            || u.Status == ProductUnitStatus.Returned
+                            || u.Status == ProductUnitStatus.Exchanged))
+            .Select(u => u.SellingPrice ?? product.SellingPrice)
+            .ToListAsync(cancellationToken);
+        if (availableRates.Count == 0)
+        {
+            return product.SellingPrice;
+        }
+
+        var distinct = availableRates.Select(Money.Round).Distinct().ToList();
+        if (distinct.Count > 1)
+        {
+            throw new ValidationAppException(
+                $"Tagged pieces of {product.ProductName} have different selling prices. Scan each unique number so the correct piece price is billed.");
+        }
+
+        return distinct[0];
+    }
 }

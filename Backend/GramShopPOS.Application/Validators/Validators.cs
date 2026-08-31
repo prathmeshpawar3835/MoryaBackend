@@ -54,6 +54,16 @@ public sealed class CreateProductRequestValidator : AbstractValidator<CreateProd
     }
 }
 
+public sealed class UpdateProductUnitRequestValidator : AbstractValidator<UpdateProductUnitRequest>
+{
+    public UpdateProductUnitRequestValidator()
+    {
+        RuleFor(x => x.SellingPrice).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.MRP).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.PurchasePrice).GreaterThanOrEqualTo(0).When(x => x.PurchasePrice.HasValue);
+    }
+}
+
 public sealed class CreateBillRequestValidator : AbstractValidator<CreateBillRequest>
 {
     public CreateBillRequestValidator()

@@ -8,6 +8,9 @@ internal static class DecimalExtensions
 {
     public static PropertyBuilder<decimal> Money(this PropertyBuilder<decimal> builder) =>
         builder.HasPrecision(18, 2);
+
+    public static PropertyBuilder<decimal?> Money(this PropertyBuilder<decimal?> builder) =>
+        builder.HasPrecision(18, 2);
 }
 
 public sealed class ApplicationUserConfiguration : IEntityTypeConfiguration<ApplicationUser>
@@ -152,6 +155,9 @@ public sealed class ProductUnitConfiguration : IEntityTypeConfiguration<ProductU
     {
         builder.ToTable("ProductUnits");
         builder.Property(x => x.UniqueNumber).HasMaxLength(30).IsRequired();
+        builder.Property(x => x.PurchasePrice).Money();
+        builder.Property(x => x.SellingPrice).Money();
+        builder.Property(x => x.MRP).Money();
         builder.HasIndex(x => x.UniqueNumber).IsUnique();
         builder.HasIndex(x => new { x.ProductId, x.StoreId, x.Status });
         builder.HasOne(x => x.Product).WithMany(x => x.Units).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);

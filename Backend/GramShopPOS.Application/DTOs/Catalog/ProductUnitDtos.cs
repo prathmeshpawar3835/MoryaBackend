@@ -15,10 +15,18 @@ public class ProductUnitDto
     public DateTime CreatedDate { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public string CategoryName { get; set; } = string.Empty;
+    public decimal PurchasePrice { get; set; }
     public decimal MRP { get; set; }
     public decimal SellingPrice { get; set; }
     public decimal? WeightGrams { get; set; }
     public string? Metal { get; set; }
+}
+
+public class UpdateProductUnitRequest
+{
+    public decimal SellingPrice { get; set; }
+    public decimal MRP { get; set; }
+    public decimal? PurchasePrice { get; set; }
 }
 
 public class ProductUnitListRequest : Common.PagedRequest

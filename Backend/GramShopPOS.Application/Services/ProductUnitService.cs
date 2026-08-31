@@ -57,6 +57,9 @@ public sealed class ProductUnitService : IProductUnitService
                 StoreId = storeId,
                 UniqueNumber = $"{prefix}-{(start + i):000000}",
                 Status = ProductUnitStatus.Available,
+                PurchasePrice = product.PurchasePrice,
+                SellingPrice = product.SellingPrice,
+                MRP = product.MRP,
                 CreatedDate = now,
                 CreatedBy = _currentUser.UserId,
                 IsActive = true
@@ -295,6 +298,13 @@ public sealed class ProductUnitService : IProductUnitService
         dto.ProductUnitId = unit.Id;
         dto.UniqueNumber = unit.UniqueNumber;
         dto.ProductUnitStatus = unit.Status;
+        dto.SellingPrice = unit.SellingPrice ?? unit.Product.SellingPrice;
+        dto.MRP = unit.MRP ?? unit.Product.MRP;
+        if (_currentUser.IsAdmin)
+        {
+            dto.PurchasePrice = unit.PurchasePrice ?? unit.Product.PurchasePrice;
+        }
+
         return dto;
     }
 
@@ -329,6 +339,7 @@ public sealed class ProductUnitService : IProductUnitService
             query = query.Where(u => u.UniqueNumber.Contains(s) || u.Product.ProductName.Contains(s) || u.Product.ProductCode.Contains(s));
         }
 
+        var showPurchase = _currentUser.IsAdmin;
         var projected = query.OrderBy(u => u.UniqueNumber).Select(u => new ProductUnitDto
         {
             Id = u.Id,
@@ -341,8 +352,9 @@ public sealed class ProductUnitService : IProductUnitService
             CreatedDate = u.CreatedDate,
             ProductName = u.Product.ProductName,
             CategoryName = u.Product.Category.Name,
-            MRP = u.Product.MRP,
-            SellingPrice = u.Product.SellingPrice,
+            PurchasePrice = showPurchase ? (u.PurchasePrice ?? u.Product.PurchasePrice) : 0,
+            MRP = u.MRP ?? u.Product.MRP,
+            SellingPrice = u.SellingPrice ?? u.Product.SellingPrice,
             WeightGrams = u.Product.WeightGrams,
             Metal = u.Product.Metal
         });
@@ -385,8 +397,8 @@ public sealed class ProductUnitService : IProductUnitService
                 UniqueNumber = u.UniqueNumber,
                 ProductName = u.Product.ProductName,
                 CategoryName = u.Product.Category.Name,
-                MRP = u.Product.MRP,
-                SellingPrice = u.Product.SellingPrice
+                MRP = u.MRP ?? u.Product.MRP,
+                SellingPrice = u.SellingPrice ?? u.Product.SellingPrice
             })
             .ToListAsync(cancellationToken);
 
@@ -396,6 +408,24 @@ public sealed class ProductUnitService : IProductUnitService
         }
 
         return units;
+    }
+
+    public async Task<ProductUnitDto> UpdatePricesAsync(int id, UpdateProductUnitRequest request, CancellationToken cancellationToken = default)
+    {
+        _currentUser.EnsureAdmin();
+        var unit = await _db.ProductUnits
+            .Include(u => u.Product).ThenInclude(p => p.Category)
+            .Include(u => u.Store)
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted, cancellationToken)
+            ?? throw new NotFoundAppException("Jewellery piece not found.");
+
+        unit.SellingPrice = Money.Round(request.SellingPrice);
+        unit.MRP = Money.Round(request.MRP);
+        unit.PurchasePrice = Money.Round(request.PurchasePrice ?? unit.PurchasePrice ?? unit.Product.PurchasePrice);
+        unit.UpdatedDate = DateTime.UtcNow;
+        unit.UpdatedBy = _currentUser.UserId;
+        await _db.SaveChangesAsync(cancellationToken);
+        return MapDto(unit);
     }
 
     private async Task<string> EnsurePrefixAsync(Category category, CancellationToken cancellationToken)
@@ -530,6 +560,26 @@ public sealed class ProductUnitService : IProductUnitService
             ? p.Inventories.Where(i => !i.IsDeleted).Sum(i => i.Quantity)
             : p.Inventories.Where(i => !i.IsDeleted && i.StoreId == storeId).Select(i => i.Quantity).FirstOrDefault(),
         IsLowStock = false
+    };
+
+    private ProductUnitDto MapDto(ProductUnit u) => new()
+    {
+        Id = u.Id,
+        ProductId = u.ProductId,
+        StoreId = u.StoreId,
+        StoreCode = u.Store.StoreCode,
+        UniqueNumber = u.UniqueNumber,
+        Status = u.Status,
+        StatusName = u.Status.ToString(),
+        BillItemId = u.BillItemId,
+        CreatedDate = u.CreatedDate,
+        ProductName = u.Product.ProductName,
+        CategoryName = u.Product.Category.Name,
+        PurchasePrice = _currentUser.IsAdmin ? (u.PurchasePrice ?? u.Product.PurchasePrice) : 0,
+        MRP = u.MRP ?? u.Product.MRP,
+        SellingPrice = u.SellingPrice ?? u.Product.SellingPrice,
+        WeightGrams = u.Product.WeightGrams,
+        Metal = u.Product.Metal
     };
 
     private static bool IsSellable(ProductUnitStatus status) =>

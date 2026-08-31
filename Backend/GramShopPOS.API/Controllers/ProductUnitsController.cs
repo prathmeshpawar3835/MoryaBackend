@@ -28,6 +28,11 @@ public sealed class ProductUnitsController : ControllerBase
     public async Task<IActionResult> Lookup(string uniqueNumber, [FromQuery] int? storeId, CancellationToken cancellationToken) =>
         Ok(await _units.LookupAsync(uniqueNumber, storeId, cancellationToken));
 
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateProductUnitRequest request, CancellationToken cancellationToken) =>
+        Ok(await _units.UpdatePricesAsync(id, request, cancellationToken));
+
     [HttpGet("{id:int}/qr")]
     public async Task<IActionResult> Qr(int id, [FromQuery] int? productId, CancellationToken cancellationToken)
     {
