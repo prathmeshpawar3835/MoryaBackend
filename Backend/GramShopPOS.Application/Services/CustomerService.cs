@@ -50,6 +50,10 @@ public sealed class CustomerService : ICustomerService
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundAppException("Customer not found.");
         _currentUser.Access().EnsureStoreAccess(dto.StoreId);
+        if (string.IsNullOrWhiteSpace(dto.ReferralCode))
+        {
+            dto.ReferralCode = await EnsureReferralCodeAsync(id, cancellationToken);
+        }
         return dto;
     }
 
@@ -171,7 +175,13 @@ public sealed class CustomerService : ICustomerService
             q = q.Where(c => c.StoreId == resolved);
         }
 
-        return await q.Select(MapExpr()).FirstOrDefaultAsync(cancellationToken);
+        var dto = await q.Select(MapExpr()).FirstOrDefaultAsync(cancellationToken);
+        if (dto is not null && string.IsNullOrWhiteSpace(dto.ReferralCode))
+        {
+            dto.ReferralCode = await EnsureReferralCodeAsync(dto.Id, cancellationToken);
+        }
+
+        return dto;
     }
 
     public async Task<CustomerHistoryDto> GetHistoryAsync(int id, CancellationToken cancellationToken = default)
@@ -496,10 +506,24 @@ public sealed class CustomerService : ICustomerService
         string code;
         do
         {
-            code = $"RF{Random.Shared.Next(100000, 999999)}";
+            code = $"RF{Random.Shared.Next(10000000, 100000000):00000000}";
         } while (await _db.Customers.AnyAsync(c => c.ReferralCode == code, cancellationToken));
 
         return code;
+    }
+
+    private async Task<string> EnsureReferralCodeAsync(int customerId, CancellationToken cancellationToken)
+    {
+        var customer = await _db.Customers.FirstAsync(c => c.Id == customerId, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(customer.ReferralCode))
+        {
+            return customer.ReferralCode;
+        }
+
+        customer.ReferralCode = await UniqueReferralCodeAsync(cancellationToken);
+        customer.UpdatedDate = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        return customer.ReferralCode;
     }
 
     public static string FormatCustomerCode(int id) => $"CUS{id:000000}";

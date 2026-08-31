@@ -23,8 +23,15 @@ public sealed class ProductionUpgradeTests
             MobileNumber = "9888888888"
         });
         created.CustomerCode.Should().MatchRegex(@"^CUS\d{6}$");
-        created.ReferralCode.Should().StartWith("RF");
+        created.ReferralCode.Should().MatchRegex(@"^RF\d{8}$");
         created.CustomerCode.Should().NotBe(created.ReferralCode);
+        var second = await customers.CreateAsync(new CreateCustomerRequest
+        {
+            StoreId = 1,
+            Name = "Anika",
+            MobileNumber = "9777777777"
+        });
+        second.ReferralCode.Should().NotBe(created.ReferralCode);
         var found = await customers.SearchAsync(created.CustomerCode, 1);
         found.Should().ContainSingle(c => c.Id == created.Id);
     }

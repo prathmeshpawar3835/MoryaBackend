@@ -83,6 +83,7 @@ public class BillDto
     public int? BirthdayOfferId { get; set; }
     public string? BirthdayOfferName { get; set; }
     public string? CustomerCode { get; set; }
+    public string? CustomerReferralCode { get; set; }
     public decimal ReturnAdjustment { get; set; }
     public decimal ExchangeAdjustment { get; set; }
     public decimal BuybackAdjustment { get; set; }
@@ -250,6 +251,7 @@ public class InvoiceDto
     public string? CustomerMobile { get; set; }
     public string? CustomerAddress { get; set; }
     public string? CustomerCode { get; set; }
+    public string? CustomerReferralCode { get; set; }
     public DateOnly? CustomerDateOfBirth { get; set; }
     public string? SalesPersonName { get; set; }
     public IReadOnlyList<BillItemDto> Products { get; set; } = [];

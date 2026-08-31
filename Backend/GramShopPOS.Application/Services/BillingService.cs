@@ -550,6 +550,7 @@ public sealed class BillingService : IBillingService
             CustomerMobile = customer?.MobileNumber,
             CustomerAddress = customer?.Address,
             CustomerCode = customer?.CustomerCode,
+            CustomerReferralCode = customer?.ReferralCode,
             CustomerDateOfBirth = customer?.DateOfBirth,
             SalesPersonName = bill.SalesPersonName,
             Products = bill.Items,
@@ -617,8 +618,11 @@ public sealed class BillingService : IBillingService
 
         var hasAdj = invoice.ReturnAdjustment + invoice.ExchangeAdjustment + invoice.BuybackAdjustment > 0;
         var extra = hasAdj ? " Your Exchange/Return/Buyback adjustment has been included in the invoice." : string.Empty;
+        var referralLine = string.IsNullOrWhiteSpace(invoice.CustomerReferralCode)
+            ? string.Empty
+            : $"\nYour unique referral code: *{invoice.CustomerReferralCode}*";
         var message =
-            $"Hello {invoice.CustomerName ?? "Customer"},\n\nThank you for shopping with {invoice.ShopName}.\n\nYour invoice *{invoice.InvoiceNumber}* has been generated successfully.{extra}\n\nPlease find your invoice details with the store. Final payable: ₹{invoice.PayableAmount:0.00}.\n\nThank you for choosing us.";
+            $"Hello {invoice.CustomerName ?? "Customer"},\n\nThank you for shopping with {invoice.ShopName}.\n\nYour invoice *{invoice.InvoiceNumber}* has been generated successfully.{extra}{referralLine}\n\nPlease find your invoice details with the store. Final payable: ₹{invoice.PayableAmount:0.00}.\n\nThank you for choosing us.";
         var shareUrl = $"https://wa.me/{digits}?text={Uri.EscapeDataString(message)}";
         return new WhatsAppShareDto
         {
@@ -750,6 +754,7 @@ public sealed class BillingService : IBillingService
             CustomerName = b.Customer != null ? b.Customer.Name : null,
             CustomerMobile = b.Customer != null ? b.Customer.MobileNumber : null,
             CustomerCode = b.Customer != null ? b.Customer.CustomerCode : null,
+            CustomerReferralCode = b.Customer != null ? b.Customer.ReferralCode : null,
             SalesPersonId = b.SalesPersonId,
             SalesPersonName = b.SalesPerson.FullName,
             BillNumber = b.BillNumber,
@@ -909,6 +914,7 @@ public sealed class BillingService : IBillingService
         CustomerName = b.Customer?.Name,
         CustomerMobile = b.Customer?.MobileNumber,
         CustomerCode = b.Customer?.CustomerCode,
+        CustomerReferralCode = b.Customer?.ReferralCode,
         SalesPersonId = b.SalesPersonId,
         SalesPersonName = b.SalesPerson?.FullName ?? string.Empty,
         BillNumber = b.BillNumber,

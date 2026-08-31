@@ -162,6 +162,8 @@ public class ImportAndTransferTests
         invoice.CustomerName.Should().Be("Percent Customer");
         invoice.CustomerMobile.Should().Be("9111111113");
         invoice.CustomerCode.Should().NotBeNullOrWhiteSpace();
+        invoice.CustomerReferralCode.Should().Be(referred.ReferralCode);
+        invoice.CustomerReferralCode.Should().NotBe(referrer.ReferralCode);
         invoice.DiscountLines.Should().Contain(l => l.Type == "Referral" && l.Amount == 500 && l.Percent == 10);
         invoice.TotalDiscount.Should().Be(500);
 

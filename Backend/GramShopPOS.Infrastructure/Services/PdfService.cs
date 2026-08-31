@@ -56,6 +56,10 @@ public sealed class PdfService : IPdfService
                         cust.Item().Text($"Customer Name: {bill.Customer?.Name ?? "Walk-in Customer"}");
                         cust.Item().Text($"Mobile: {bill.Customer?.MobileNumber ?? "—"}");
                         cust.Item().Text($"Customer Code: {bill.Customer?.CustomerCode ?? "—"}");
+                        if (!string.IsNullOrWhiteSpace(bill.Customer?.ReferralCode))
+                        {
+                            cust.Item().Text($"Referral Code: {bill.Customer.ReferralCode}");
+                        }
                         if (!string.IsNullOrWhiteSpace(bill.Customer?.Address))
                         {
                             cust.Item().Text($"Address: {bill.Customer.Address}");
@@ -67,7 +71,7 @@ public sealed class PdfService : IPdfService
                         {
                             refCol.Item().Text("Referral Information").Bold();
                             refCol.Item().Text($"Referral Customer: {bill.ReferrerName}");
-                            refCol.Item().Text($"Referral Code: {bill.ReferrerCode}");
+                            refCol.Item().Text($"Referrer Code Used: {bill.ReferrerCode}");
                             if (bill.ReferralDiscountPercent > 0)
                             {
                                 refCol.Item().Text($"Referral Discount: {bill.ReferralDiscountPercent:0.##}%");
