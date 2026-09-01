@@ -262,6 +262,7 @@ public sealed class ReturnDocumentService : IReturnDocumentService
         Reason = r.Reason,
         ReturnKind = r.ReturnKind,
         ExchangeBillId = r.ExchangeBillId,
+        ExchangeBillNumber = r.ExchangeBill?.BillNumber,
         SalesPersonId = r.SalesPersonId,
         SalesPersonName = r.SalesPerson?.FullName,
         AppliedToBillId = r.AppliedToBillId,

@@ -21,6 +21,8 @@ public sealed class BillingService : IBillingService
     private readonly IReturnDocumentService _returns;
     private readonly IBirthdayService _birthdays;
     private readonly IProductUnitService _units;
+    private readonly IWhatsAppService? _whatsApp;
+    private readonly IPdfService? _pdf;
 
     public BillingService(
         IAppDbContext db,
@@ -31,7 +33,9 @@ public sealed class BillingService : IBillingService
         IReferralService referrals,
         IReturnDocumentService returns,
         IBirthdayService birthdays,
-        IProductUnitService? units = null)
+        IProductUnitService? units = null,
+        IWhatsAppService? whatsApp = null,
+        IPdfService? pdf = null)
     {
         _db = db;
         _currentUser = currentUser;
@@ -42,6 +46,8 @@ public sealed class BillingService : IBillingService
         _returns = returns;
         _birthdays = birthdays;
         _units = units ?? new ProductUnitService(_db, _currentUser);
+        _whatsApp = whatsApp;
+        _pdf = pdf;
     }
 
     public async Task<BillDto> CreateBillAsync(CreateBillRequest request, CancellationToken cancellationToken = default)
@@ -602,40 +608,37 @@ public sealed class BillingService : IBillingService
     public async Task<WhatsAppShareDto> GetWhatsAppShareAsync(int id, CancellationToken cancellationToken = default)
     {
         var invoice = await GetInvoiceAsync(id, cancellationToken);
-        if (string.IsNullOrWhiteSpace(invoice.CustomerMobile))
-        {
-            return new WhatsAppShareDto
-            {
-                Sent = false,
-                InvoiceNumber = invoice.InvoiceNumber,
-                Error = "Customer mobile number is not available.",
-                Message = string.Empty,
-                ShareUrl = string.Empty
-            };
-        }
-
-        var digits = new string(invoice.CustomerMobile.Where(char.IsDigit).ToArray());
-        if (digits.Length == 10)
-        {
-            digits = "91" + digits;
-        }
-
         var hasAdj = invoice.ReturnAdjustment + invoice.ExchangeAdjustment + invoice.BuybackAdjustment > 0;
         var extra = hasAdj ? " Your Exchange/Return/Buyback adjustment has been included in the invoice." : string.Empty;
         var referralLine = string.IsNullOrWhiteSpace(invoice.CustomerReferralCode)
             ? string.Empty
             : $"\nYour unique referral code: *{invoice.CustomerReferralCode}*";
         var message =
-            $"Hello {invoice.CustomerName ?? "Customer"},\n\nThank you for shopping with {invoice.ShopName}.\n\nYour invoice *{invoice.InvoiceNumber}* has been generated successfully.{extra}{referralLine}\n\nPlease find your invoice details with the store. Final payable: ₹{invoice.PayableAmount:0.00}.\n\nThank you for choosing us.";
-        var shareUrl = $"https://wa.me/{digits}?text={Uri.EscapeDataString(message)}";
-        return new WhatsAppShareDto
+            $"Hello {invoice.CustomerName ?? "Customer"},\n\nThank you for shopping with {invoice.ShopName}.\n\nYour invoice *{invoice.InvoiceNumber}* is attached as a PDF.{extra}{referralLine}\n\nFinal payable: ₹{invoice.PayableAmount:0.00}.\n\nThank you for choosing us.";
+        return WhatsAppDelivery.Preview(invoice.CustomerMobile, message, invoice.InvoiceNumber);
+    }
+
+    public async Task<WhatsAppShareDto> SendWhatsAppAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var share = await GetWhatsAppShareAsync(id, cancellationToken);
+        if (string.IsNullOrWhiteSpace(share.Phone) || _pdf is null || _whatsApp is null)
         {
-            Sent = false,
-            Phone = digits,
-            Message = message,
-            ShareUrl = shareUrl,
-            InvoiceNumber = invoice.InvoiceNumber
-        };
+            return share;
+        }
+
+        var pdf = await _pdf.InvoicePdfAsync(id, cancellationToken);
+        var result = await WhatsAppDelivery.SendPdfAsync(_whatsApp, share, pdf.Content, pdf.FileName, cancellationToken);
+        var bill = await _db.Bills.AsNoTracking().FirstAsync(b => b.Id == id, cancellationToken);
+        if (result.DocumentAttached)
+        {
+            await _audit.LogAsync(AuditActions.InvoiceWhatsAppSent, nameof(Bill), id.ToString(), null, new { result.InvoiceNumber, result.Phone }, bill.StoreId, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(result.Error))
+        {
+            await _audit.LogAsync(AuditActions.InvoiceWhatsAppFailed, nameof(Bill), id.ToString(), null, new { result.Error }, bill.StoreId, cancellationToken);
+        }
+
+        return result;
     }
 
     public async Task<HeldBillDto> HoldBillAsync(HeldBillRequest request, CancellationToken cancellationToken = default)

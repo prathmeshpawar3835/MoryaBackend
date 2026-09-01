@@ -16,19 +16,25 @@ public sealed class ReturnService : IReturnService
     private readonly IBillingService _billing;
     private readonly IAuditService _audit;
     private readonly IReturnDocumentService _documents;
+    private readonly IWhatsAppService? _whatsApp;
+    private readonly IPdfService? _pdf;
 
     public ReturnService(
         IAppDbContext db,
         ICurrentUser currentUser,
         IBillingService billing,
         IAuditService audit,
-        IReturnDocumentService documents)
+        IReturnDocumentService documents,
+        IWhatsAppService? whatsApp = null,
+        IPdfService? pdf = null)
     {
         _db = db;
         _currentUser = currentUser;
         _billing = billing;
         _audit = audit;
         _documents = documents;
+        _whatsApp = whatsApp;
+        _pdf = pdf;
     }
 
     public async Task<ReturnDto> CreateReturnAsync(CreateReturnRequest request, CancellationToken cancellationToken = default)
@@ -141,6 +147,7 @@ public sealed class ReturnService : IReturnService
             Reason = r.Reason,
             ReturnKind = r.ReturnKind,
             ExchangeBillId = r.ExchangeBillId,
+            ExchangeBillNumber = r.ExchangeBill != null ? r.ExchangeBill.BillNumber : null,
             SalesPersonId = r.SalesPersonId,
             SalesPersonName = r.SalesPerson != null ? r.SalesPerson.FullName : null
         });
@@ -160,6 +167,52 @@ public sealed class ReturnService : IReturnService
             ?? throw new NotFoundAppException("Return not found.");
         _currentUser.Access().EnsureStoreAccess(entity.StoreId);
         return Map(entity);
+    }
+
+    public async Task<WhatsAppShareDto> SendWhatsAppAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var entity = await GetByIdAsync(id, cancellationToken);
+        var kind = entity.ReturnKind switch
+        {
+            ReturnKind.Exchange => "exchange",
+            ReturnKind.Buyback => "buyback",
+            _ => "return"
+        };
+        var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
+        var shop = string.IsNullOrWhiteSpace(settings.ShopName) ? entity.StoreName : settings.ShopName;
+        var linked = entity.ExchangeBillNumber is { Length: > 0 }
+            ? $"\nLinked invoice: *{entity.ExchangeBillNumber}*."
+            : string.Empty;
+        var message =
+            $"Hello {entity.CustomerName ?? "Customer"},\n\nYour {kind} receipt *{entity.ReturnNumber}* is attached as a PDF.\n\nAmount: ₹{entity.ReturnAmount:0.00}\nOriginal invoice: *{entity.OriginalBillNumber}*.{linked}\n\nThank you for choosing {shop}.";
+        var share = WhatsAppDelivery.Preview(entity.CustomerMobile, message, entity.ReturnNumber);
+        if (string.IsNullOrWhiteSpace(share.Phone) || _pdf is null || _whatsApp is null)
+        {
+            return share;
+        }
+
+        var pdf = await _pdf.ReturnNotePdfAsync(id, cancellationToken);
+        var result = await WhatsAppDelivery.SendPdfAsync(_whatsApp, share, pdf.Content, pdf.FileName, cancellationToken);
+        if (result.DocumentAttached && entity.ExchangeBillId is int billId)
+        {
+            var invoicePdf = await _pdf.InvoicePdfAsync(billId, cancellationToken);
+            var invoiceShare = WhatsAppDelivery.Preview(
+                entity.CustomerMobile,
+                $"Hello {entity.CustomerName ?? "Customer"},\n\nYour exchange invoice *{entity.ExchangeBillNumber}* is attached as a PDF.",
+                entity.ExchangeBillNumber ?? invoicePdf.FileName);
+            await WhatsAppDelivery.SendPdfAsync(_whatsApp, invoiceShare, invoicePdf.Content, invoicePdf.FileName, cancellationToken);
+        }
+
+        if (result.DocumentAttached)
+        {
+            await _audit.LogAsync(AuditActions.DocumentWhatsAppSent, nameof(ProductReturn), id.ToString(), null, new { entity.ReturnNumber, entity.ReturnKind, result.Phone }, entity.StoreId, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(result.Error))
+        {
+            await _audit.LogAsync(AuditActions.DocumentWhatsAppFailed, nameof(ProductReturn), id.ToString(), null, new { result.Error }, entity.StoreId, cancellationToken);
+        }
+
+        return result;
     }
 
     private static ReturnDto Map(ProductReturn r) => ReturnDocumentService.Map(r);

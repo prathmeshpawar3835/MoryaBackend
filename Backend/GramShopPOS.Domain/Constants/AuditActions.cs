@@ -48,4 +48,8 @@ public static class AuditActions
     public const string BirthdayOfferRedeemed = "BirthdayOfferRedeemed";
     public const string BirthdayWhatsAppSent = "BirthdayWhatsAppSent";
     public const string BirthdayWhatsAppFailed = "BirthdayWhatsAppFailed";
+    public const string InvoiceWhatsAppSent = "InvoiceWhatsAppSent";
+    public const string InvoiceWhatsAppFailed = "InvoiceWhatsAppFailed";
+    public const string DocumentWhatsAppSent = "DocumentWhatsAppSent";
+    public const string DocumentWhatsAppFailed = "DocumentWhatsAppFailed";
 }

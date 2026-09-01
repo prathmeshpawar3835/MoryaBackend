@@ -94,20 +94,8 @@ public sealed class BillsController : ControllerBase
         Ok(await _billing.GetWhatsAppShareAsync(id, cancellationToken));
 
     [HttpPost("{id:int}/whatsapp")]
-    public async Task<IActionResult> WhatsAppSend(int id, CancellationToken cancellationToken)
-    {
-        var share = await _billing.GetWhatsAppShareAsync(id, cancellationToken);
-        if (string.IsNullOrWhiteSpace(share.ShareUrl))
-        {
-            share.Sent = false;
-            share.Error ??= "Invoice generated successfully, but WhatsApp sending failed.";
-            return Ok(share);
-        }
-
-        share.Sent = true;
-        share.Error = null;
-        return Ok(share);
-    }
+    public async Task<IActionResult> WhatsAppSend(int id, CancellationToken cancellationToken) =>
+        Ok(await _billing.SendWhatsAppAsync(id, cancellationToken));
 
     [HttpPost("{id:int}/cancel")]
     public async Task<IActionResult> Cancel(int id, [FromBody] CancelRequest? request, CancellationToken cancellationToken)
@@ -150,6 +138,10 @@ public sealed class ReturnsController : ControllerBase
     [HttpGet("{id:int}/pdf")]
     public async Task<IActionResult> Pdf(int id, CancellationToken cancellationToken) =>
         Ok(await _pdf.ReturnNotePdfAsync(id, cancellationToken));
+
+    [HttpPost("{id:int}/whatsapp")]
+    public async Task<IActionResult> WhatsAppSend(int id, CancellationToken cancellationToken) =>
+        Ok(await _returns.SendWhatsAppAsync(id, cancellationToken));
 }
 
 [ApiController]

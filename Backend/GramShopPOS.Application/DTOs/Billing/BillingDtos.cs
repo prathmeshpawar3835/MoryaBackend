@@ -186,6 +186,7 @@ public class ReturnDto
     public string? Reason { get; set; }
     public ReturnKind ReturnKind { get; set; }
     public int? ExchangeBillId { get; set; }
+    public string? ExchangeBillNumber { get; set; }
     public int? SalesPersonId { get; set; }
     public string? SalesPersonName { get; set; }
     public int? AppliedToBillId { get; set; }
@@ -302,6 +303,8 @@ public class InvoiceDiscountLineDto
 public class WhatsAppShareDto
 {
     public bool Sent { get; set; }
+    public bool DocumentAttached { get; set; }
+    public string Delivery { get; set; } = "share";
     public string Message { get; set; } = string.Empty;
     public string ShareUrl { get; set; } = string.Empty;
     public string? Phone { get; set; }

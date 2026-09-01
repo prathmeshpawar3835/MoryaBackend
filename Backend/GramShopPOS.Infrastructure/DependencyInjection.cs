@@ -24,7 +24,10 @@ public static class DependencyInjection
         services.AddScoped<IExcelWorkbookService, ExcelWorkbookService>();
         services.AddScoped<IPdfService, PdfService>();
         services.AddScoped<ILabelDocumentService, LabelDocumentService>();
-        services.AddHttpClient(nameof(WhatsAppService));
+        services.AddHttpClient(nameof(WhatsAppService), client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(90);
+        });
         services.AddScoped<IWhatsAppService, WhatsAppService>();
         services.AddHostedService<Jobs.BirthdayNotificationHostedService>();
         services.AddScoped<DatabaseSeeder>();
