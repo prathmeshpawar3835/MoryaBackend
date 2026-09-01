@@ -47,7 +47,10 @@ public sealed class ReferralService : IReferralService
                 r.ReferralCode.Contains(s) ||
                 r.ReferrerCustomer.Name.Contains(s) ||
                 r.ReferredCustomer.Name.Contains(s) ||
-                r.ReferrerCustomer.ReferralCode.Contains(s));
+                r.ReferrerCustomer.ReferralCode.Contains(s) ||
+                r.ReferrerCustomer.CustomerCode.Contains(s) ||
+                r.ReferredCustomer.CustomerCode.Contains(s) ||
+                r.ReferredCustomer.ReferralCode.Contains(s));
         }
 
         var projected = query.OrderByDescending(r => r.ReferralDate).Select(r => new ReferralDto
@@ -76,8 +79,7 @@ public sealed class ReferralService : IReferralService
             return new ReferralValidationDto { Valid = false, Message = "Referral code is required." };
         }
 
-        var trimmed = code.Trim();
-        var query = _db.Customers.AsNoTracking().Where(c => !c.IsDeleted && c.IsActive && c.ReferralCode == trimmed);
+        var query = CustomerReferral.MatchingCode(_db.Customers.AsNoTracking().Where(c => !c.IsDeleted && c.IsActive), code);
         if (storeId.HasValue)
         {
             var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
@@ -337,8 +339,7 @@ public sealed class ReferralService : IReferralService
         Customer? referrer = null;
         if (!string.IsNullOrWhiteSpace(referralCode))
         {
-            var code = referralCode.Trim();
-            var query = _db.Customers.Where(c => c.ReferralCode == code && !c.IsDeleted && c.IsActive);
+            var query = CustomerReferral.MatchingCode(_db.Customers.Where(c => !c.IsDeleted && c.IsActive), referralCode);
             if (settings.ReferralStoreWise)
             {
                 query = query.Where(c => c.StoreId == storeId);

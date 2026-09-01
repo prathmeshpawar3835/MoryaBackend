@@ -1,3 +1,4 @@
+using GramShopPOS.Application.Common;
 using GramShopPOS.Application.DTOs.Reports;
 using GramShopPOS.Application.Exceptions;
 using GramShopPOS.Application.Interfaces;
@@ -33,6 +34,9 @@ public sealed class PdfService : IPdfService
             .FirstOrDefaultAsync(b => b.Id == billId, cancellationToken)
             ?? throw new NotFoundAppException("Bill not found.");
         _currentUser.Access().EnsureStoreAccess(bill.StoreId);
+        var customerReferralCode = bill.CustomerId.HasValue
+            ? await CustomerReferral.EnsureAsync(_db, bill.CustomerId.Value, cancellationToken)
+            : null;
         var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
 
         var bytes = Document.Create(container =>
@@ -56,10 +60,7 @@ public sealed class PdfService : IPdfService
                         cust.Item().Text($"Customer Name: {bill.Customer?.Name ?? "Walk-in Customer"}");
                         cust.Item().Text($"Mobile: {bill.Customer?.MobileNumber ?? "—"}");
                         cust.Item().Text($"Customer Code: {bill.Customer?.CustomerCode ?? "—"}");
-                        if (!string.IsNullOrWhiteSpace(bill.Customer?.ReferralCode))
-                        {
-                            cust.Item().Text($"Referral Code: {bill.Customer.ReferralCode}");
-                        }
+                        cust.Item().Text($"Referral Code: {customerReferralCode ?? "—"}");
                         if (!string.IsNullOrWhiteSpace(bill.Customer?.Address))
                         {
                             cust.Item().Text($"Address: {bill.Customer.Address}");
@@ -151,6 +152,10 @@ public sealed class PdfService : IPdfService
                     if (bill.WalletRedeemed > 0) col.Item().AlignRight().Text($"Customer Credit Used: -{bill.WalletRedeemed:0.00}");
                     if (bill.CreditGenerated > 0) col.Item().AlignRight().Text($"Credit Generated: {bill.CreditGenerated:0.00}");
                     col.Item().AlignRight().Text($"Final Payable: {bill.PayableAmount:0.00}").Bold();
+                    foreach (var pay in bill.Payments.OrderBy(p => p.Id))
+                    {
+                        col.Item().AlignRight().Text($"{pay.PaymentMode}: {pay.Amount:0.00}");
+                    }
                     col.Item().AlignRight().Text($"Paid: {bill.PaidAmount:0.00}  Due: {bill.DueAmount:0.00}");
                     col.Item().PaddingTop(10).Text(settings.InvoiceFooter ?? string.Empty);
                     col.Item().Text(settings.ReturnPolicy ?? string.Empty).FontSize(9);
@@ -181,8 +186,18 @@ public sealed class PdfService : IPdfService
                 page.Header().Text($"{settings.ShopName} - Customer Ledger").FontSize(16).Bold();
                 page.Content().Column(col =>
                 {
-                    col.Item().Text($"{customer.Name}  |  {customer.CustomerCode}  |  {customer.MobileNumber}");
-                    col.Item().Text($"Outstanding: {customer.OutstandingBalance:0.00}");
+                    col.Item().Text($"{customer.Name}  |  {customer.CustomerCode}  |  Referral {customer.ReferralCode}  |  {customer.MobileNumber}");
+                    var current = entries.Count > 0 ? entries[^1].Balance : customer.OutstandingBalance;
+                    var overdue = Math.Max(0, current);
+                    var advance = Math.Max(0, -current);
+                    col.Item().Text(overdue > 0
+                        ? $"Overdue: {overdue:0.00}"
+                        : advance > 0
+                            ? $"Credit balance: {advance:0.00}"
+                            : "Outstanding: 0.00");
+                    var totalDebit = entries.Sum(e => e.Debit);
+                    var totalCredit = entries.Sum(e => e.Credit);
+                    col.Item().Text($"Total debit: {totalDebit:0.00}   Total credit: {totalCredit:0.00}");
                     col.Item().Table(table =>
                     {
                         table.ColumnsDefinition(c =>
@@ -296,6 +311,8 @@ public sealed class PdfService : IPdfService
         }
 
         var amount = entry.Debit > 0 ? entry.Debit : entry.Credit;
+        var overdue = Math.Max(0, entry.Balance);
+        var advance = Math.Max(0, -entry.Balance);
         var bytes = ComposeReceipt(
             settings.ShopName,
             TitleForLedger(entry.TransactionType),
@@ -304,14 +321,17 @@ public sealed class PdfService : IPdfService
                 ("Store contact", customer.Store?.ContactNumber ?? settings.Mobile ?? string.Empty),
                 ("Customer", customer.Name),
                 ("Customer code", customer.CustomerCode),
+                ("Referral code", string.IsNullOrWhiteSpace(customer.ReferralCode) ? "—" : customer.ReferralCode),
                 ("Mobile", customer.MobileNumber),
                 ("Transaction no.", entry.ReferenceNumber ?? $"LED-{entry.Id}"),
                 ("Date & time", entry.TransactionDate.ToString("dd-MMM-yyyy HH:mm")),
-                ("Transaction type", entry.TransactionType.ToString()),
+                ("Transaction type", TitleForLedger(entry.TransactionType)),
                 ("Amount", amount.ToString("0.00")),
                 ("Debit", entry.Debit.ToString("0.00")),
                 ("Credit", entry.Credit.ToString("0.00")),
-                ("Balance", entry.Balance.ToString("0.00")),
+                ("Running balance", entry.Balance.ToString("0.00")),
+                ("Overdue", overdue.ToString("0.00")),
+                ("Credit balance", advance.ToString("0.00")),
                 ("Payment mode", paymentMode ?? (entry.TransactionType == LedgerTransactionType.WalletRedeem ? "Customer credit" : "—")),
                 ("Reference", entry.ReferenceNumber ?? "—"),
                 ("Received by", receivedBy),

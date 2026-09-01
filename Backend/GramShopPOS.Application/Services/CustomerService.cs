@@ -39,7 +39,9 @@ public sealed class CustomerService : ICustomerService
         }
 
         var projected = query.OrderBy(c => c.Name).Select(MapExpr());
-        return await projected.ToPagedAsync(request, cancellationToken);
+        var page = await projected.ToPagedAsync(request, cancellationToken);
+        await BackfillReferralCodesAsync(page.Items, cancellationToken);
+        return page;
     }
 
     public async Task<CustomerDto> GetByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -52,7 +54,7 @@ public sealed class CustomerService : ICustomerService
         _currentUser.Access().EnsureStoreAccess(dto.StoreId);
         if (string.IsNullOrWhiteSpace(dto.ReferralCode))
         {
-            dto.ReferralCode = await EnsureReferralCodeAsync(id, cancellationToken);
+            dto.ReferralCode = await CustomerReferral.EnsureAsync(_db, id, cancellationToken);
         }
         return dto;
     }
@@ -76,7 +78,8 @@ public sealed class CustomerService : ICustomerService
         int? referrerId = null;
         if (!string.IsNullOrWhiteSpace(request.ReferralCode))
         {
-            var referrer = await _db.Customers.FirstOrDefaultAsync(c => c.ReferralCode == request.ReferralCode.Trim() && !c.IsDeleted, cancellationToken)
+            var referrer = await CustomerReferral.MatchingCode(_db.Customers.Where(c => !c.IsDeleted && c.IsActive), request.ReferralCode)
+                .FirstOrDefaultAsync(cancellationToken)
                 ?? throw new ValidationAppException("Invalid customer / referral code.");
             if (referrer.MobileNumber == request.MobileNumber.Trim())
             {
@@ -103,7 +106,7 @@ public sealed class CustomerService : ICustomerService
             MobileNumber = request.MobileNumber.Trim(),
             Address = request.Address,
             DateOfBirth = request.DateOfBirth,
-            ReferralCode = await UniqueReferralCodeAsync(cancellationToken),
+            ReferralCode = await CustomerReferral.NextCodeAsync(_db, cancellationToken),
             CustomerCode = UniqueTempCode(),
             ReferredByCustomerId = referrerId,
             CreatedDate = DateTime.UtcNow,
@@ -152,11 +155,13 @@ public sealed class CustomerService : ICustomerService
         }
 
         var s = query.Trim();
-        return await q.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s) || c.CustomerCode.Contains(s))
+        var items = await q.Where(c => c.Name.Contains(s) || c.MobileNumber.Contains(s) || c.ReferralCode.Contains(s) || c.CustomerCode.Contains(s))
             .OrderBy(c => c.Name)
             .Take(50)
             .Select(MapExpr())
             .ToListAsync(cancellationToken);
+        await BackfillReferralCodesAsync(items, cancellationToken);
+        return items;
     }
 
     public async Task<CustomerDto?> GetByMobileAsync(string mobile, int? storeId, CancellationToken cancellationToken = default)
@@ -178,7 +183,7 @@ public sealed class CustomerService : ICustomerService
         var dto = await q.Select(MapExpr()).FirstOrDefaultAsync(cancellationToken);
         if (dto is not null && string.IsNullOrWhiteSpace(dto.ReferralCode))
         {
-            dto.ReferralCode = await EnsureReferralCodeAsync(dto.Id, cancellationToken);
+            dto.ReferralCode = await CustomerReferral.EnsureAsync(_db, dto.Id, cancellationToken);
         }
 
         return dto;
@@ -255,12 +260,17 @@ public sealed class CustomerService : ICustomerService
 
         var first = rows.OrderBy(r => r.Id).First();
         var last = rows.OrderBy(r => r.Id).Last();
+        var totalDebit = Money.Round(rows.Sum(r => r.Debit));
+        var totalCredit = Money.Round(rows.Sum(r => r.Credit));
+        var current = last.Balance;
         return new LedgerSummaryDto
         {
             OpeningBalance = Money.Round(first.Balance - first.Debit + first.Credit),
-            TotalDebit = Money.Round(rows.Sum(r => r.Debit)),
-            TotalCredit = Money.Round(rows.Sum(r => r.Credit)),
-            CurrentBalance = last.Balance
+            TotalDebit = totalDebit,
+            TotalCredit = totalCredit,
+            CurrentBalance = current,
+            OverdueAmount = Money.Round(Math.Max(0, current)),
+            AdvanceCredit = Money.Round(Math.Max(0, -current))
         };
     }
 
@@ -305,6 +315,7 @@ public sealed class CustomerService : ICustomerService
             StoreContact = customer.Store?.ContactNumber,
             CustomerName = customer.Name,
             CustomerCode = customer.CustomerCode,
+            ReferralCode = customer.ReferralCode,
             MobileNumber = customer.MobileNumber,
             TransactionNumber = entry.ReferenceNumber ?? $"LED-{entry.Id}",
             TransactionDate = entry.TransactionDate,
@@ -313,6 +324,8 @@ public sealed class CustomerService : ICustomerService
             Debit = entry.Debit,
             Credit = entry.Credit,
             Balance = entry.Balance,
+            OverdueAmount = Money.Round(Math.Max(0, entry.Balance)),
+            AdvanceCredit = Money.Round(Math.Max(0, -entry.Balance)),
             PaymentMode = paymentMode,
             ReferenceNumber = entry.ReferenceNumber,
             ReceivedBy = receivedBy,
@@ -501,29 +514,12 @@ public sealed class CustomerService : ICustomerService
         return query;
     }
 
-    private async Task<string> UniqueReferralCodeAsync(CancellationToken cancellationToken)
+    private async Task BackfillReferralCodesAsync(IReadOnlyList<CustomerDto> items, CancellationToken cancellationToken)
     {
-        string code;
-        do
+        foreach (var dto in items.Where(x => string.IsNullOrWhiteSpace(x.ReferralCode)))
         {
-            code = $"RF{Random.Shared.Next(10000000, 100000000):00000000}";
-        } while (await _db.Customers.AnyAsync(c => c.ReferralCode == code, cancellationToken));
-
-        return code;
-    }
-
-    private async Task<string> EnsureReferralCodeAsync(int customerId, CancellationToken cancellationToken)
-    {
-        var customer = await _db.Customers.FirstAsync(c => c.Id == customerId, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(customer.ReferralCode))
-        {
-            return customer.ReferralCode;
+            dto.ReferralCode = await CustomerReferral.EnsureAsync(_db, dto.Id, cancellationToken);
         }
-
-        customer.ReferralCode = await UniqueReferralCodeAsync(cancellationToken);
-        customer.UpdatedDate = DateTime.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
-        return customer.ReferralCode;
     }
 
     public static string FormatCustomerCode(int id) => $"CUS{id:000000}";
@@ -547,7 +543,9 @@ public sealed class CustomerService : ICustomerService
             CustomerCode = c.CustomerCode,
             ReferredByCustomerId = c.ReferredByCustomerId,
             ReferredByName = c.ReferredByCustomer != null ? c.ReferredByCustomer.Name : null,
-            OutstandingBalance = c.OutstandingBalance,
+            OutstandingBalance = c.LedgerEntries.OrderByDescending(l => l.Id).Select(l => (decimal?)l.Balance).FirstOrDefault() ?? c.OutstandingBalance,
+            TotalDebit = c.LedgerEntries.Sum(l => l.Debit),
+            TotalCredit = c.LedgerEntries.Sum(l => l.Credit),
             WalletBalance = c.WalletBalance,
             IsActive = c.IsActive,
             HasCompletedSale = c.Bills.Any(b => b.BillType == BillType.Sale && b.Status != BillStatus.Cancelled),
@@ -569,7 +567,11 @@ public sealed class CustomerService : ICustomerService
         CustomerCode = c.CustomerCode,
         ReferredByCustomerId = c.ReferredByCustomerId,
         ReferredByName = c.ReferredByCustomer?.Name,
-        OutstandingBalance = c.OutstandingBalance,
+        OutstandingBalance = c.LedgerEntries.Count > 0
+            ? c.LedgerEntries.OrderByDescending(l => l.Id).First().Balance
+            : c.OutstandingBalance,
+        TotalDebit = c.LedgerEntries.Sum(l => l.Debit),
+        TotalCredit = c.LedgerEntries.Sum(l => l.Credit),
         WalletBalance = c.WalletBalance,
         IsActive = c.IsActive,
         HasCompletedSale = c.Bills.Any(b => b.BillType == BillType.Sale && b.Status != BillStatus.Cancelled),

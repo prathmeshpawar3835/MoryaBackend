@@ -6,6 +6,7 @@ using GramShopPOS.Application.Services;
 using GramShopPOS.Domain.Enums;
 using GramShopPOS.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using System.IO.Compression;
 
 namespace GramShopPOS.Tests;
 
@@ -175,5 +176,21 @@ public class ProductUnitTests
         bytes[1].Should().Be((byte)'P');
         bytes[2].Should().Be((byte)'N');
         bytes[3].Should().Be((byte)'G');
+    }
+
+    [Fact]
+    public void Qr_zip_contains_one_png_per_unique_number()
+    {
+        var labels = new LabelDocumentService();
+        var zip = labels.QrZip(
+        [
+            new ProductUnitLabelDto { Id = 1, UniqueNumber = "RNG-000001", ProductName = "Ring", CategoryName = "Ring", SellingPrice = 100, MRP = 120 },
+            new ProductUnitLabelDto { Id = 1, UniqueNumber = "RNG-000001", ProductName = "Ring", CategoryName = "Ring", SellingPrice = 100, MRP = 120 },
+            new ProductUnitLabelDto { Id = 2, UniqueNumber = "RNG-000002", ProductName = "Ring", CategoryName = "Ring", SellingPrice = 110, MRP = 130 }
+        ]);
+        zip.FileName.Should().Be("jewellery-qr-codes.zip");
+        using var stream = new MemoryStream(zip.Content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        archive.Entries.Select(e => e.FullName).Should().BeEquivalentTo(["RNG-000001.png", "RNG-000002.png"]);
     }
 }

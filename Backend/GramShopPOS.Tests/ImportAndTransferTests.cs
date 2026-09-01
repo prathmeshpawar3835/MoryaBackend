@@ -178,7 +178,93 @@ public class ImportAndTransferTests
         second.ReferralDiscount.Should().Be(0);
         second.GrandTotal.Should().Be(5150m);
         (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == referrer.Id)).WalletBalance.Should().Be(750);
-        fx.Db.Referrals.Should().ContainSingle(r => r.BillId == first.Id && r.DiscountGiven == 500 && r.NewCustomerPercent == 10);
+        fx.Db.CustomerLedgers.Should().ContainSingle(r => r.BillId == first.Id && r.DiscountGiven == 500 && r.NewCustomerPercent == 10);
+    }
+
+    [Fact]
+    public async Task Referral_accepts_customer_code_as_well_as_referral_code()
+    {
+        await using var fx = new SqliteFixture();
+        var referrer = fx.Db.Customers.First();
+        var referrals = new ReferralService(fx.Db, fx.User, new AuditService(fx.Db, fx.User));
+        var byCustomerCode = await referrals.ValidateCodeAsync(referrer.CustomerCode, null, 1);
+        byCustomerCode.Valid.Should().BeTrue();
+        byCustomerCode.ReferrerCustomerId.Should().Be(referrer.Id);
+
+        var customers = new CustomerService(fx.Db, fx.User, new AuditService(fx.Db, fx.User));
+        var referred = await customers.CreateAsync(new Application.DTOs.Customers.CreateCustomerRequest
+        {
+            StoreId = 1,
+            Name = "Code Referred",
+            MobileNumber = "9111111114",
+            ReferralCode = referrer.CustomerCode
+        });
+        referred.ReferredByCustomerId.Should().Be(referrer.Id);
+
+        var billing = CreateBilling(fx);
+        var bill = await billing.CreateBillAsync(new CreateBillRequest
+        {
+            StoreId = 1,
+            CustomerId = referred.Id,
+            ReferralCode = referrer.CustomerCode,
+            Items = [new CreateBillItemRequest { ProductId = fx.Db.Products.First().Id, Quantity = 1 }],
+            Payments = [new CreatePaymentRequest { PaymentMode = PaymentMode.Cash, Amount = 5098.50m }]
+        });
+        bill.ReferralDiscount.Should().Be(50);
+        var invoice = await billing.GetInvoiceAsync(bill.Id);
+        invoice.CustomerReferralCode.Should().NotBeNullOrWhiteSpace();
+        invoice.CustomerCode.Should().Be(referred.CustomerCode);
+    }
+
+    [Fact]
+    public async Task Ledger_summary_shows_remaining_credit_when_credit_exceeds_debit()
+    {
+        await using var fx = new SqliteFixture();
+        var customer = fx.Db.Customers.First();
+        fx.Db.CustomerLedgers.AddRange(
+            new GramShopPOS.Domain.Entities.CustomerLedger
+            {
+                CustomerId = customer.Id,
+                StoreId = 1,
+                Debit = 1000,
+                Credit = 0,
+                Balance = 1000,
+                TransactionType = LedgerTransactionType.Sale,
+                Description = "Sale",
+                TransactionDate = DateTime.UtcNow,
+                CreatedDate = DateTime.UtcNow,
+                IsActive = true
+            },
+            new GramShopPOS.Domain.Entities.CustomerLedger
+            {
+                CustomerId = customer.Id,
+                StoreId = 1,
+                Debit = 0,
+                Credit = 1500,
+                Balance = -500,
+                TransactionType = LedgerTransactionType.PaymentReceived,
+                Description = "Payment",
+                TransactionDate = DateTime.UtcNow,
+                CreatedDate = DateTime.UtcNow,
+                IsActive = true
+            });
+        customer.OutstandingBalance = -500;
+        fx.Db.SaveChanges();
+
+        var customers = new CustomerService(fx.Db, fx.User, new AuditService(fx.Db, fx.User));
+        var summary = await customers.GetLedgerSummaryAsync(customer.Id);
+        summary.TotalDebit.Should().Be(1000);
+        summary.TotalCredit.Should().Be(1500);
+        summary.CurrentBalance.Should().Be(-500);
+        summary.OverdueAmount.Should().Be(0);
+        summary.AdvanceCredit.Should().Be(500);
+
+        var dto = await customers.GetByIdAsync(customer.Id);
+        dto.TotalDebit.Should().Be(1000);
+        dto.TotalCredit.Should().Be(1500);
+        dto.OverdueAmount.Should().Be(0);
+        dto.AdvanceCredit.Should().Be(500);
+        dto.ReferralCode.Should().NotBeNullOrWhiteSpace();
     }
 
     private static BillingService CreateBilling(SqliteFixture fx) =>

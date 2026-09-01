@@ -402,6 +402,12 @@ public sealed class ProductUnitService : IProductUnitService
             })
             .ToListAsync(cancellationToken);
 
+        units = units
+            .GroupBy(u => u.UniqueNumber, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .OrderBy(u => u.UniqueNumber)
+            .ToList();
+
         if (units.Count == 0)
         {
             throw new NotFoundAppException("No jewellery pieces were found for printing.");

@@ -514,8 +514,11 @@ public sealed class BillingService : IBillingService
         var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
         var store = await _db.Stores.AsNoTracking().FirstAsync(s => s.Id == bill.StoreId, cancellationToken);
         var customer = bill.CustomerId.HasValue
-            ? await _db.Customers.AsNoTracking().FirstAsync(c => c.Id == bill.CustomerId, cancellationToken)
+            ? await _db.Customers.FirstAsync(c => c.Id == bill.CustomerId, cancellationToken)
             : null;
+        var customerReferralCode = customer is null
+            ? null
+            : await CustomerReferral.EnsureAsync(_db, customer.Id, cancellationToken);
         var discountLines = InvoiceDiscountComposer.Build(
             bill.ItemDiscountTotal,
             bill.BillDiscount,
@@ -551,7 +554,7 @@ public sealed class BillingService : IBillingService
             CustomerMobile = customer?.MobileNumber,
             CustomerAddress = customer?.Address,
             CustomerCode = customer?.CustomerCode,
-            CustomerReferralCode = customer?.ReferralCode,
+            CustomerReferralCode = customerReferralCode,
             CustomerDateOfBirth = customer?.DateOfBirth,
             SalesPersonName = bill.SalesPersonName,
             Products = bill.Items,

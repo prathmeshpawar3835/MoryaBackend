@@ -17,6 +17,10 @@ public class CustomerDto
     public int? ReferredByCustomerId { get; set; }
     public string? ReferredByName { get; set; }
     public decimal OutstandingBalance { get; set; }
+    public decimal TotalDebit { get; set; }
+    public decimal TotalCredit { get; set; }
+    public decimal OverdueAmount => Math.Max(0, OutstandingBalance);
+    public decimal AdvanceCredit => Math.Max(0, -OutstandingBalance);
     public decimal WalletBalance { get; set; }
     public bool IsActive { get; set; }
     public bool HasCompletedSale { get; set; }
@@ -69,6 +73,8 @@ public class LedgerSummaryDto
     public decimal TotalDebit { get; set; }
     public decimal TotalCredit { get; set; }
     public decimal CurrentBalance { get; set; }
+    public decimal OverdueAmount { get; set; }
+    public decimal AdvanceCredit { get; set; }
 }
 
 public class LedgerReceiptDto
@@ -80,6 +86,7 @@ public class LedgerReceiptDto
     public string? StoreContact { get; set; }
     public string CustomerName { get; set; } = string.Empty;
     public string CustomerCode { get; set; } = string.Empty;
+    public string ReferralCode { get; set; } = string.Empty;
     public string MobileNumber { get; set; } = string.Empty;
     public string TransactionNumber { get; set; } = string.Empty;
     public DateTime TransactionDate { get; set; }
@@ -88,6 +95,8 @@ public class LedgerReceiptDto
     public decimal Debit { get; set; }
     public decimal Credit { get; set; }
     public decimal Balance { get; set; }
+    public decimal OverdueAmount { get; set; }
+    public decimal AdvanceCredit { get; set; }
     public string? PaymentMode { get; set; }
     public string? ReferenceNumber { get; set; }
     public string ReceivedBy { get; set; } = string.Empty;

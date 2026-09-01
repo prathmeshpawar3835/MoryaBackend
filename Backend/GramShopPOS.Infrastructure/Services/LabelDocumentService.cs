@@ -42,21 +42,12 @@ public sealed class LabelDocumentService : ILabelDocumentService
         using var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, true))
         {
-            foreach (var unit in units)
+            foreach (var unit in units.GroupBy(u => u.UniqueNumber, StringComparer.OrdinalIgnoreCase).Select(g => g.First()))
             {
                 var qrEntry = zip.CreateEntry($"{unit.UniqueNumber}.png");
-                using (var entryStream = qrEntry.Open())
-                {
-                    var png = QrPng(unit.UniqueNumber);
-                    entryStream.Write(png, 0, png.Length);
-                }
-
-                var barcodeEntry = zip.CreateEntry($"{unit.UniqueNumber}-code128.svg");
-                using (var entryStream = barcodeEntry.Open())
-                {
-                    var svg = Encoding.UTF8.GetBytes(Code128Encoder.ToSvg(unit.UniqueNumber));
-                    entryStream.Write(svg, 0, svg.Length);
-                }
+                using var entryStream = qrEntry.Open();
+                var png = QrPng(unit.UniqueNumber);
+                entryStream.Write(png, 0, png.Length);
             }
         }
 
