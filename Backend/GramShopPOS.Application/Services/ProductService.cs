@@ -145,7 +145,7 @@ public sealed class ProductService : IProductService
             WeightGrams = request.WeightGrams,
             Metal = string.IsNullOrWhiteSpace(request.Metal) ? null : request.Metal.Trim(),
             IsActive = true,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId
         };
         _db.Products.Add(product);
@@ -183,7 +183,7 @@ public sealed class ProductService : IProductService
         product.WeightGrams = request.WeightGrams;
         product.Metal = string.IsNullOrWhiteSpace(request.Metal) ? null : request.Metal.Trim();
         product.IsActive = request.IsActive;
-        product.UpdatedDate = DateTime.UtcNow;
+        product.UpdatedDate = DateTime.Now;
         product.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(priceChanged ? AuditActions.PriceChanged : AuditActions.ProductUpdated, nameof(Product), id.ToString(), old, product, null, cancellationToken);
@@ -197,7 +197,7 @@ public sealed class ProductService : IProductService
             ?? throw new NotFoundAppException("Product not found.");
         product.IsDeleted = true;
         product.IsActive = false;
-        product.UpdatedDate = DateTime.UtcNow;
+        product.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.ProductDeleted, nameof(Product), id.ToString(), null, null, null, cancellationToken);
     }
@@ -251,8 +251,8 @@ public sealed class ProductService : IProductService
         {
             BatchId = Guid.NewGuid(),
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.UtcNow,
-            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(30),
+            CreatedDate = DateTime.Now,
+            ExpiresAtUtc = DateTime.Now.AddMinutes(30),
             Status = valid.Count > 0 && result.All(r => r.Item1.IsValid) ? "Pending" : "Invalid",
             PayloadJson = JsonSerializer.Serialize(valid),
             ValidRowCount = valid.Count,
@@ -275,7 +275,7 @@ public sealed class ProductService : IProductService
         _currentUser.EnsureAdmin();
         var batch = await _db.ProductImportBatches.FirstOrDefaultAsync(b => b.BatchId == batchId, cancellationToken)
             ?? throw new NotFoundAppException("Import batch not found.");
-        if (batch.ExpiresAtUtc < DateTime.UtcNow || batch.Status != "Pending")
+        if (batch.ExpiresAtUtc < DateTime.Now || batch.Status != "Pending")
         {
             throw new BusinessAppException("Import batch is invalid, expired, or contains errors.");
         }
@@ -303,7 +303,7 @@ public sealed class ProductService : IProductService
                     MRP = row.MRP,
                     TaxPercent = row.TaxPercent,
                     Barcode = row.Barcode,
-                    CreatedDate = DateTime.UtcNow,
+                    CreatedDate = DateTime.Now,
                     CreatedBy = _currentUser.UserId,
                     IsActive = true
                 };
@@ -321,7 +321,7 @@ public sealed class ProductService : IProductService
                 product.MRP = row.MRP;
                 product.TaxPercent = row.TaxPercent;
                 product.Barcode = row.Barcode;
-                product.UpdatedDate = DateTime.UtcNow;
+                product.UpdatedDate = DateTime.Now;
                 await _db.SaveChangesAsync(cancellationToken);
                 updated++;
             }
@@ -353,7 +353,7 @@ public sealed class ProductService : IProductService
         var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Product not found.");
         product.ImagePath = relativePath;
-        product.UpdatedDate = DateTime.UtcNow;
+        product.UpdatedDate = DateTime.Now;
         product.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, null, cancellationToken);

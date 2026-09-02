@@ -47,22 +47,22 @@ public sealed class SqliteFixture : IAsyncDisposable
     private void Seed()
     {
         Db.Roles.AddRange(
-            new Role { Name = Roles.Admin, IsActive = true, CreatedDate = DateTime.UtcNow },
-            new Role { Name = Roles.SalesPerson, IsActive = true, CreatedDate = DateTime.UtcNow });
+            new Role { Name = Roles.Admin, IsActive = true, CreatedDate = DateTime.Now },
+            new Role { Name = Roles.SalesPerson, IsActive = true, CreatedDate = DateTime.Now });
         Db.Stores.AddRange(
-            new Store { StoreCode = "STORE01", StoreName = "Main", InvoicePrefix = "STORE01", IsActive = true, CreatedDate = DateTime.UtcNow },
-            new Store { StoreCode = "STORE02", StoreName = "Second", InvoicePrefix = "STORE02", IsActive = true, CreatedDate = DateTime.UtcNow });
+            new Store { StoreCode = "STORE01", StoreName = "Main", InvoicePrefix = "STORE01", IsActive = true, CreatedDate = DateTime.Now },
+            new Store { StoreCode = "STORE02", StoreName = "Second", InvoicePrefix = "STORE02", IsActive = true, CreatedDate = DateTime.Now });
         Db.SaveChanges();
 
-        var admin = new ApplicationUser { UserName = "admin", FullName = "Admin", PasswordHash = Passwords.Hash("ChangeMe@123"), IsActive = true, CreatedDate = DateTime.UtcNow };
-        var sales = new ApplicationUser { UserName = "salesperson", FullName = "Sales", PasswordHash = Passwords.Hash("ChangeMe@123"), IsActive = true, CreatedDate = DateTime.UtcNow };
+        var admin = new ApplicationUser { UserName = "admin", FullName = "Admin", PasswordHash = Passwords.Hash("ChangeMe@123"), IsActive = true, CreatedDate = DateTime.Now };
+        var sales = new ApplicationUser { UserName = "salesperson", FullName = "Sales", PasswordHash = Passwords.Hash("ChangeMe@123"), IsActive = true, CreatedDate = DateTime.Now };
         Db.Users.AddRange(admin, sales);
         Db.SaveChanges();
         Db.UserRoles.AddRange(
             new UserRole { UserId = admin.Id, RoleId = Db.Roles.First(r => r.Name == Roles.Admin).Id },
             new UserRole { UserId = sales.Id, RoleId = Db.Roles.First(r => r.Name == Roles.SalesPerson).Id });
-        Db.StoreUsers.Add(new StoreUser { UserId = sales.Id, StoreId = 1, IsPrimary = true, CreatedDate = DateTime.UtcNow });
-        Db.Categories.Add(new Category { Name = "Chains", IsActive = true, CreatedDate = DateTime.UtcNow });
+        Db.StoreUsers.Add(new StoreUser { UserId = sales.Id, StoreId = 1, IsPrimary = true, CreatedDate = DateTime.Now });
+        Db.Categories.Add(new Category { Name = "Chains", IsActive = true, CreatedDate = DateTime.Now });
         Db.SaveChanges();
         Db.Products.Add(new Product
         {
@@ -77,7 +77,7 @@ public sealed class SqliteFixture : IAsyncDisposable
             TaxPercent = 3,
             MinimumStockLevel = 1,
             IsActive = true,
-            CreatedDate = DateTime.UtcNow
+            CreatedDate = DateTime.Now
         });
         Db.BusinessSettings.Add(new BusinessSetting
         {
@@ -91,10 +91,10 @@ public sealed class SqliteFixture : IAsyncDisposable
             RewardType = RewardType.FixedAmount,
             RewardTrigger = RewardTrigger.FirstPurchase,
             IsActive = true,
-            CreatedDate = DateTime.UtcNow
+            CreatedDate = DateTime.Now
         });
         Db.SaveChanges();
-        Db.Inventories.Add(new Inventory { StoreId = 1, ProductId = Db.Products.First().Id, Quantity = 10, IsActive = true, CreatedDate = DateTime.UtcNow });
+        Db.Inventories.Add(new Inventory { StoreId = 1, ProductId = Db.Products.First().Id, Quantity = 10, IsActive = true, CreatedDate = DateTime.Now });
         Db.Customers.Add(new Customer
         {
             StoreId = 1,
@@ -104,7 +104,7 @@ public sealed class SqliteFixture : IAsyncDisposable
             CustomerCode = "CUS000001",
             WalletBalance = 500,
             IsActive = true,
-            CreatedDate = DateTime.UtcNow
+            CreatedDate = DateTime.Now
         });
         Db.SaveChanges();
         User.UserId = admin.Id;

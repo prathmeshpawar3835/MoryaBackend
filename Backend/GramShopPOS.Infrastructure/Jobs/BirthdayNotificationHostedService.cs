@@ -52,7 +52,7 @@ public sealed class BirthdayNotificationHostedService : BackgroundService
         {
             var tz = TimeZoneInfo.FindSystemTimeZoneById(
                 OperatingSystem.IsWindows() ? "India Standard Time" : "Asia/Kolkata");
-            var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.Now, tz);
             var next = now.Date.AddHours(6).AddMinutes(15);
             if (now >= next)
             {

@@ -45,7 +45,7 @@ public sealed class AuthService : IAuthService
             throw new UnauthorizedAppException("Invalid username or password.");
         }
 
-        if (user.LockoutEndUtc is not null && user.LockoutEndUtc > DateTime.UtcNow)
+        if (user.LockoutEndUtc is not null && user.LockoutEndUtc > DateTime.Now)
         {
             throw new ForbiddenAppException("Account is locked. Try again later.");
         }
@@ -55,7 +55,7 @@ public sealed class AuthService : IAuthService
             user.AccessFailedCount += 1;
             if (user.AccessFailedCount >= PasswordRules.LockoutThreshold)
             {
-                user.LockoutEndUtc = DateTime.UtcNow.AddMinutes(PasswordRules.LockoutMinutes);
+                user.LockoutEndUtc = DateTime.Now.AddMinutes(PasswordRules.LockoutMinutes);
                 user.AccessFailedCount = 0;
             }
 
@@ -83,7 +83,7 @@ public sealed class AuthService : IAuthService
 
         user.AccessFailedCount = 0;
         user.LockoutEndUtc = null;
-        user.LastLoginDate = DateTime.UtcNow;
+        user.LastLoginDate = DateTime.Now;
         await _db.SaveChangesAsync(cancellationToken);
 
         var token = _jwt.CreateToken(user.Id, user.UserName, role, stores.Select(s => s.StoreId).ToList());
@@ -110,8 +110,8 @@ public sealed class AuthService : IAuthService
             {
                 Jti = _currentUser.JwtId,
                 UserId = _currentUser.UserId,
-                CreatedDate = DateTime.UtcNow,
-                ExpiresAtUtc = DateTime.UtcNow.AddHours(12)
+                CreatedDate = DateTime.Now,
+                ExpiresAtUtc = DateTime.Now.AddHours(12)
             });
             await _db.SaveChangesAsync(cancellationToken);
         }
@@ -133,7 +133,7 @@ public sealed class AuthService : IAuthService
         _passwords.ValidateStrength(request.NewPassword);
         user.PasswordHash = _passwords.Hash(request.NewPassword);
         user.MustChangePassword = false;
-        user.UpdatedDate = DateTime.UtcNow;
+        user.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.PasswordChanged, nameof(ApplicationUser), user.Id.ToString(), null, null, null, cancellationToken);
     }
@@ -156,8 +156,8 @@ public sealed class AuthService : IAuthService
         {
             UserId = user.Id,
             TokenHash = _passwords.Hash(raw),
-            CreatedDate = DateTime.UtcNow,
-            ExpiresAtUtc = DateTime.UtcNow.AddHours(1)
+            CreatedDate = DateTime.Now,
+            ExpiresAtUtc = DateTime.Now.AddHours(1)
         });
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -175,7 +175,7 @@ public sealed class AuthService : IAuthService
             ?? throw new ValidationAppException("Invalid reset request.");
 
         var tokens = await _db.PasswordResetTokens
-            .Where(t => t.UserId == user.Id && !t.IsUsed && t.ExpiresAtUtc > DateTime.UtcNow)
+            .Where(t => t.UserId == user.Id && !t.IsUsed && t.ExpiresAtUtc > DateTime.Now)
             .OrderByDescending(t => t.CreatedDate)
             .ToListAsync(cancellationToken);
 

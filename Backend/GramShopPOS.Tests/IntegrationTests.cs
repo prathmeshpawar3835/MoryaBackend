@@ -20,7 +20,7 @@ public class IntegrationTests
     {
         var jwt = new Mock<IJwtTokenService>();
         jwt.Setup(x => x.CreateToken(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<int>>()))
-            .Returns(("token", DateTime.UtcNow.AddHours(1), "jti"));
+            .Returns(("token", DateTime.Now.AddHours(1), "jti"));
         var env = new Mock<IAppEnvironment>();
         env.SetupGet(x => x.IsDevelopment).Returns(true);
         var audit = new AuditService(fx.Db, fx.User);

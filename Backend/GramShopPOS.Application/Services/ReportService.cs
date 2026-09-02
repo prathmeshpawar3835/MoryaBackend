@@ -343,7 +343,7 @@ public sealed class ReportService : IReportService
 
     private static void ApplyPeriod(ReportRequest request)
     {
-        var today = DateTime.UtcNow.Date;
+        var today = DateTime.Now.Date;
         switch (request.Period.ToLowerInvariant())
         {
             case "daily":
@@ -363,8 +363,8 @@ public sealed class ReportService : IReportService
 
     private static (DateTime From, DateTime To) Range(PagedRequest request)
     {
-        var from = request.FromDate?.Date ?? DateTime.UtcNow.Date.AddMonths(-1);
-        var to = (request.ToDate?.Date ?? DateTime.UtcNow.Date).AddDays(1);
+        var from = request.FromDate?.Date ?? DateTime.Now.Date.AddMonths(-1);
+        var to = (request.ToDate?.Date ?? DateTime.Now.Date).AddDays(1);
         return (from, to);
     }
 }

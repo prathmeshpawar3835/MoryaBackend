@@ -40,7 +40,7 @@ public static class CustomerReferral
         }
 
         customer.ReferralCode = await NextCodeAsync(db, cancellationToken);
-        customer.UpdatedDate = DateTime.UtcNow;
+        customer.UpdatedDate = DateTime.Now;
         await db.SaveChangesAsync(cancellationToken);
         return customer.ReferralCode;
     }

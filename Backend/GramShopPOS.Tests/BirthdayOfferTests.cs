@@ -35,7 +35,7 @@ public class BirthdayOfferTests
             DiscountKind = kind,
             Value = value,
             IsActive = active,
-            CreatedDate = DateTime.UtcNow
+            CreatedDate = DateTime.Now
         };
         fx.Db.StoreDiscounts.Add(offer);
         fx.Db.SaveChanges();
@@ -221,7 +221,7 @@ public class BirthdayOfferTests
             DiscountKind = DiscountKind.Percentage,
             Value = 5,
             IsActive = true,
-            CreatedDate = DateTime.UtcNow
+            CreatedDate = DateTime.Now
         });
         fx.Db.SaveChanges();
         var storeOfferId = fx.Db.StoreDiscounts.Single(d => d.Name == "Store Promo").Id;

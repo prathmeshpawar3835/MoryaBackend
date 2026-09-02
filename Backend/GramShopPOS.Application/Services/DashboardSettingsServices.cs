@@ -37,7 +37,7 @@ public sealed class DashboardService : IDashboardService
             bills = bills.Where(b => b.StoreId == storeId.Value);
         }
 
-        var start = DateTime.UtcNow.Date;
+        var start = DateTime.Now.Date;
         var monthStart = new DateTime(start.Year, start.Month, 1);
         var todayBills = bills.Where(b => b.BillDate >= start && b.BillType == BillType.Sale);
         var monthBills = bills.Where(b => b.BillDate >= monthStart && b.BillType == BillType.Sale);
@@ -394,7 +394,7 @@ public sealed class SettingsService : ISettingsService
             s.WhatsAppAccessToken = request.WhatsAppAccessToken;
         }
         s.WhatsAppApiBaseUrl = request.WhatsAppApiBaseUrl;
-        s.UpdatedDate = DateTime.UtcNow;
+        s.UpdatedDate = DateTime.Now;
         s.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(Domain.Constants.AuditActions.SettingsChanged, nameof(Domain.Entities.BusinessSetting), s.Id.ToString(), null, request, null, cancellationToken);

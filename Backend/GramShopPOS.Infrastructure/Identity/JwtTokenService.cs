@@ -28,7 +28,7 @@ public sealed class JwtTokenService : IJwtTokenService
     public (string Token, DateTime Expiration, string Jti) CreateToken(int userId, string userName, string role, IReadOnlyList<int> storeIds)
     {
         var jti = Guid.NewGuid().ToString("N");
-        var expiration = DateTime.UtcNow.AddMinutes(_options.ExpiryMinutes);
+        var expiration = DateTime.Now.AddMinutes(_options.ExpiryMinutes);
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, userId.ToString()),

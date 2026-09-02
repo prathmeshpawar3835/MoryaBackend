@@ -231,8 +231,8 @@ public class ImportAndTransferTests
                 Balance = 1000,
                 TransactionType = LedgerTransactionType.Sale,
                 Description = "Sale",
-                TransactionDate = DateTime.UtcNow,
-                CreatedDate = DateTime.UtcNow,
+                TransactionDate = DateTime.Now,
+                CreatedDate = DateTime.Now,
                 IsActive = true
             },
             new GramShopPOS.Domain.Entities.CustomerLedger
@@ -244,8 +244,8 @@ public class ImportAndTransferTests
                 Balance = -500,
                 TransactionType = LedgerTransactionType.PaymentReceived,
                 Description = "Payment",
-                TransactionDate = DateTime.UtcNow,
-                CreatedDate = DateTime.UtcNow,
+                TransactionDate = DateTime.Now,
+                CreatedDate = DateTime.Now,
                 IsActive = true
             });
         customer.OutstandingBalance = -500;

@@ -4,7 +4,7 @@ public static class BusinessCalendar
 {
     public static DateOnly Today()
     {
-        var utc = DateTime.UtcNow;
+        var utc = DateTime.Now;
         try
         {
             var tz = TimeZoneInfo.FindSystemTimeZoneById(

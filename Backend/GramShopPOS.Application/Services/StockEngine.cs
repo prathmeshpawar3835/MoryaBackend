@@ -48,7 +48,7 @@ public sealed class StockEngine : IStockEngine
                 ProductId = productId,
                 Quantity = 0,
                 IsActive = true,
-                CreatedDate = DateTime.UtcNow,
+                CreatedDate = DateTime.Now,
                 CreatedBy = userId
             };
             _db.Inventories.Add(inventory);
@@ -59,7 +59,7 @@ public sealed class StockEngine : IStockEngine
             .Where(i => i.Id == inventory.Id && (allowNegative || i.Quantity + delta >= 0))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(i => i.Quantity, i => i.Quantity + delta)
-                .SetProperty(i => i.UpdatedDate, DateTime.UtcNow)
+                .SetProperty(i => i.UpdatedDate, DateTime.Now)
                 .SetProperty(i => i.UpdatedBy, userId), cancellationToken);
 
         if (rows == 0)
@@ -83,7 +83,7 @@ public sealed class StockEngine : IStockEngine
             ReferenceNumber = referenceNumber,
             Reason = reason,
             UserId = userId,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = userId,
             IsActive = true
         });

@@ -28,8 +28,8 @@ public sealed class DatabaseSeeder
         if (!await _db.Roles.AnyAsync(cancellationToken))
         {
             _db.Roles.AddRange(
-                new Role { Name = Roles.Admin, Description = "Full access", IsActive = true, CreatedDate = DateTime.UtcNow },
-                new Role { Name = Roles.SalesPerson, Description = "Store sales access", IsActive = true, CreatedDate = DateTime.UtcNow });
+                new Role { Name = Roles.Admin, Description = "Full access", IsActive = true, CreatedDate = DateTime.Now },
+                new Role { Name = Roles.SalesPerson, Description = "Store sales access", IsActive = true, CreatedDate = DateTime.Now });
             await _db.SaveChangesAsync(cancellationToken);
         }
 
@@ -44,7 +44,7 @@ public sealed class DatabaseSeeder
                 GSTNumber = "22AAAAA0000A1Z5",
                 InvoicePrefix = "STORE01",
                 IsActive = true,
-                CreatedDate = DateTime.UtcNow
+                CreatedDate = DateTime.Now
             });
             await _db.SaveChangesAsync(cancellationToken);
         }
@@ -61,7 +61,7 @@ public sealed class DatabaseSeeder
                 PasswordHash = _passwords.Hash("ChangeMe@123"),
                 MustChangePassword = true,
                 IsActive = true,
-                CreatedDate = DateTime.UtcNow
+                CreatedDate = DateTime.Now
             };
             var sales = new ApplicationUser
             {
@@ -70,14 +70,14 @@ public sealed class DatabaseSeeder
                 PasswordHash = _passwords.Hash("ChangeMe@123"),
                 MustChangePassword = true,
                 IsActive = true,
-                CreatedDate = DateTime.UtcNow
+                CreatedDate = DateTime.Now
             };
             _db.Users.AddRange(admin, sales);
             await _db.SaveChangesAsync(cancellationToken);
             _db.UserRoles.AddRange(
                 new UserRole { UserId = admin.Id, RoleId = adminRole.Id },
                 new UserRole { UserId = sales.Id, RoleId = salesRole.Id });
-            _db.StoreUsers.Add(new StoreUser { UserId = sales.Id, StoreId = store.Id, IsPrimary = true, CreatedDate = DateTime.UtcNow });
+            _db.StoreUsers.Add(new StoreUser { UserId = sales.Id, StoreId = store.Id, IsPrimary = true, CreatedDate = DateTime.Now });
             await _db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Seeded default admin and salesperson users.");
         }
@@ -85,9 +85,9 @@ public sealed class DatabaseSeeder
         if (!await _db.Categories.AnyAsync(cancellationToken))
         {
             _db.Categories.AddRange(
-                new Category { Name = "Chains", CodePrefix = "CHN", Description = "Gold chains", IsActive = true, CreatedDate = DateTime.UtcNow },
-                new Category { Name = "Rings", CodePrefix = "RNG", Description = "Gold rings", IsActive = true, CreatedDate = DateTime.UtcNow },
-                new Category { Name = "Earrings", CodePrefix = "ERG", Description = "Gold earrings", IsActive = true, CreatedDate = DateTime.UtcNow });
+                new Category { Name = "Chains", CodePrefix = "CHN", Description = "Gold chains", IsActive = true, CreatedDate = DateTime.Now },
+                new Category { Name = "Rings", CodePrefix = "RNG", Description = "Gold rings", IsActive = true, CreatedDate = DateTime.Now },
+                new Category { Name = "Earrings", CodePrefix = "ERG", Description = "Gold earrings", IsActive = true, CreatedDate = DateTime.Now });
             await _db.SaveChangesAsync(cancellationToken);
         }
 
@@ -98,8 +98,8 @@ public sealed class DatabaseSeeder
             var store = await _db.Stores.FirstAsync(cancellationToken);
             var products = new[]
             {
-                new Product { ProductCode = "1G-CHAIN-001", Barcode = "890000000001", ProductName = "1 Gram Gold Chain", CategoryId = chains.Id, Unit = "PCS", PurchasePrice = 4500, SellingPrice = 5200, MRP = 5500, TaxPercent = 3, MinimumStockLevel = 2, IsActive = true, CreatedDate = DateTime.UtcNow },
-                new Product { ProductCode = "1G-RING-001", Barcode = "890000000002", ProductName = "1 Gram Gold Ring", CategoryId = rings.Id, Unit = "PCS", PurchasePrice = 4300, SellingPrice = 5000, MRP = 5300, TaxPercent = 3, MinimumStockLevel = 2, IsActive = true, CreatedDate = DateTime.UtcNow }
+                new Product { ProductCode = "1G-CHAIN-001", Barcode = "890000000001", ProductName = "1 Gram Gold Chain", CategoryId = chains.Id, Unit = "PCS", PurchasePrice = 4500, SellingPrice = 5200, MRP = 5500, TaxPercent = 3, MinimumStockLevel = 2, IsActive = true, CreatedDate = DateTime.Now },
+                new Product { ProductCode = "1G-RING-001", Barcode = "890000000002", ProductName = "1 Gram Gold Ring", CategoryId = rings.Id, Unit = "PCS", PurchasePrice = 4300, SellingPrice = 5000, MRP = 5300, TaxPercent = 3, MinimumStockLevel = 2, IsActive = true, CreatedDate = DateTime.Now }
             };
             _db.Products.AddRange(products);
             await _db.SaveChangesAsync(cancellationToken);
@@ -111,7 +111,7 @@ public sealed class DatabaseSeeder
                     ProductId = product.Id,
                     Quantity = 10,
                     IsActive = true,
-                    CreatedDate = DateTime.UtcNow
+                    CreatedDate = DateTime.Now
                 });
                 _db.StockMovements.Add(new StockMovement
                 {
@@ -123,7 +123,7 @@ public sealed class DatabaseSeeder
                     MovementType = StockMovementType.OpeningStock,
                     Reason = "Seed opening stock",
                     UserId = (await _db.Users.FirstAsync(u => u.UserName == "admin", cancellationToken)).Id,
-                    CreatedDate = DateTime.UtcNow,
+                    CreatedDate = DateTime.Now,
                     IsActive = true
                 });
             }
@@ -154,11 +154,11 @@ public sealed class DatabaseSeeder
                 RewardType = RewardType.Percentage,
                 RewardTrigger = RewardTrigger.FirstPurchase,
                 IsActive = true,
-                CreatedDate = DateTime.UtcNow
+                CreatedDate = DateTime.Now
             });
             _db.TaxSettings.AddRange(
-                new TaxSetting { Name = "GST 3%", Percent = 3, IsDefault = true, IsActive = true, CreatedDate = DateTime.UtcNow },
-                new TaxSetting { Name = "GST 5%", Percent = 5, IsDefault = false, IsActive = true, CreatedDate = DateTime.UtcNow });
+                new TaxSetting { Name = "GST 3%", Percent = 3, IsDefault = true, IsActive = true, CreatedDate = DateTime.Now },
+                new TaxSetting { Name = "GST 5%", Percent = 5, IsDefault = false, IsActive = true, CreatedDate = DateTime.Now });
             await _db.SaveChangesAsync(cancellationToken);
         }
 
@@ -188,7 +188,7 @@ public sealed class DatabaseSeeder
                 DiscountKind = DiscountKind.Percentage,
                 Value = birthdayPercent,
                 IsActive = true,
-                CreatedDate = DateTime.UtcNow
+                CreatedDate = DateTime.Now
             });
         }
 
@@ -243,7 +243,7 @@ public sealed class DatabaseSeeder
             var seq = await _db.ProductUnitSequences.FirstOrDefaultAsync(s => s.Prefix == prefix, cancellationToken);
             if (seq is null)
             {
-                seq = new ProductUnitSequence { Prefix = prefix, LastNumber = 0, CreatedDate = DateTime.UtcNow, IsActive = true };
+                seq = new ProductUnitSequence { Prefix = prefix, LastNumber = 0, CreatedDate = DateTime.Now, IsActive = true };
                 _db.ProductUnitSequences.Add(seq);
                 await _db.SaveChangesAsync(cancellationToken);
             }
@@ -258,7 +258,7 @@ public sealed class DatabaseSeeder
                     StoreId = sample.StoreId,
                     UniqueNumber = $"{prefix}-{(start + i):000000}",
                     Status = ProductUnitStatus.Available,
-                    CreatedDate = DateTime.UtcNow,
+                    CreatedDate = DateTime.Now,
                     IsActive = true
                 });
             }

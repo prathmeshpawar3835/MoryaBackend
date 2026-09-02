@@ -87,7 +87,7 @@ public sealed class UserService : IUserService
             PasswordHash = _passwords.Hash(request.Password),
             MustChangePassword = true,
             IsActive = true,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId
         };
         _db.Users.Add(user);
@@ -115,7 +115,7 @@ public sealed class UserService : IUserService
         user.Email = request.Email;
         user.PhoneNumber = request.PhoneNumber;
         user.IsActive = request.IsActive;
-        user.UpdatedDate = DateTime.UtcNow;
+        user.UpdatedDate = DateTime.Now;
         user.UpdatedBy = _currentUser.UserId;
         if (!user.IsActive)
         {
@@ -152,7 +152,7 @@ public sealed class UserService : IUserService
                 UserId = userId,
                 StoreId = storeId,
                 IsPrimary = first,
-                CreatedDate = DateTime.UtcNow
+                CreatedDate = DateTime.Now
             });
             first = false;
         }
@@ -242,7 +242,7 @@ public sealed class StoreService : IStoreService
             GSTNumber = request.GSTNumber,
             InvoicePrefix = string.IsNullOrWhiteSpace(request.InvoicePrefix) ? request.StoreCode.Trim().ToUpperInvariant() : request.InvoicePrefix.Trim().ToUpperInvariant(),
             IsActive = true,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId
         };
         _db.Stores.Add(store);
@@ -269,7 +269,7 @@ public sealed class StoreService : IStoreService
         store.GSTNumber = request.GSTNumber;
         store.InvoicePrefix = string.IsNullOrWhiteSpace(request.InvoicePrefix) ? store.StoreCode : request.InvoicePrefix.Trim().ToUpperInvariant();
         store.IsActive = request.IsActive;
-        store.UpdatedDate = DateTime.UtcNow;
+        store.UpdatedDate = DateTime.Now;
         store.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.StoreUpdated, nameof(Store), store.Id.ToString(), null, store, store.Id, cancellationToken);
@@ -337,7 +337,7 @@ public sealed class CategoryService : ICategoryService
             CodePrefix = prefix,
             Description = request.Description,
             IsActive = true,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId
         };
         _db.Categories.Add(category);
@@ -355,7 +355,7 @@ public sealed class CategoryService : ICategoryService
         category.CodePrefix = await ResolvePrefixAsync(request.CodePrefix, request.Name, id, cancellationToken);
         category.Description = request.Description;
         category.IsActive = request.IsActive;
-        category.UpdatedDate = DateTime.UtcNow;
+        category.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.CategoryUpdated, nameof(Category), category.Id.ToString(), null, category, null, cancellationToken);
         return new CategoryDto { Id = category.Id, Name = category.Name, CodePrefix = category.CodePrefix, Description = category.Description, IsActive = category.IsActive, CreatedDate = category.CreatedDate };
@@ -379,7 +379,7 @@ public sealed class CategoryService : ICategoryService
             category.IsActive = false;
         }
 
-        category.UpdatedDate = DateTime.UtcNow;
+        category.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.CategoryDeleted, nameof(Category), id.ToString(), null, null, null, cancellationToken);
     }

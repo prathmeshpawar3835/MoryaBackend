@@ -175,7 +175,7 @@ public sealed class BirthdayService : IBirthdayService
             DiscountPercent = applied.Percent,
             DiscountAmount = applied.Amount,
             Status = BirthdayRedemptionStatus.Redeemed,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         });
@@ -197,7 +197,7 @@ public sealed class BirthdayService : IBirthdayService
         foreach (var row in rows)
         {
             row.Status = BirthdayRedemptionStatus.Cancelled;
-            row.UpdatedDate = DateTime.UtcNow;
+            row.UpdatedDate = DateTime.Now;
             row.UpdatedBy = _currentUser.UserId;
         }
     }
@@ -231,7 +231,7 @@ public sealed class BirthdayService : IBirthdayService
                 StoreId = customer.StoreId,
                 BirthdayDate = today,
                 MobileNumber = customer.MobileNumber,
-                CreatedDate = DateTime.UtcNow,
+                CreatedDate = DateTime.Now,
                 IsActive = true
             };
             log.BirthdayOfferId = offer?.Id;
@@ -258,7 +258,7 @@ public sealed class BirthdayService : IBirthdayService
             if (send.Success)
             {
                 log.Status = WhatsAppMessageStatus.Sent;
-                log.SentDate = DateTime.UtcNow;
+                log.SentDate = DateTime.Now;
                 log.Error = null;
                 result.MessagesSent++;
                 await _audit.LogAsync(AuditActions.BirthdayWhatsAppSent, nameof(BirthdayMessageLog), log.Id.ToString(), null, new { customer.Id, customer.MobileNumber }, customer.StoreId, cancellationToken);
@@ -271,7 +271,7 @@ public sealed class BirthdayService : IBirthdayService
                 await _audit.LogAsync(AuditActions.BirthdayWhatsAppFailed, nameof(BirthdayMessageLog), log.Id.ToString(), null, new { send.Error }, customer.StoreId, cancellationToken);
             }
 
-            log.UpdatedDate = DateTime.UtcNow;
+            log.UpdatedDate = DateTime.Now;
             await _db.SaveChangesAsync(cancellationToken);
         }
 

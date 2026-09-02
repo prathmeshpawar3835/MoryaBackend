@@ -47,7 +47,7 @@ public sealed class ProductUnitService : IProductUnitService
 
         var prefix = await EnsurePrefixAsync(product.Category, cancellationToken);
         var start = await AllocateRangeAsync(prefix, count, cancellationToken);
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         var units = new List<ProductUnit>(count);
         for (var i = 0; i < count; i++)
         {
@@ -140,7 +140,7 @@ public sealed class ProductUnitService : IProductUnitService
         {
             unit.Status = ProductUnitStatus.Sold;
             unit.BillItemId = billItemId;
-            unit.UpdatedDate = DateTime.UtcNow;
+            unit.UpdatedDate = DateTime.Now;
             unit.UpdatedBy = _currentUser.UserId;
         }
 
@@ -164,7 +164,7 @@ public sealed class ProductUnitService : IProductUnitService
         {
             unit.Status = restoredStatus;
             unit.BillItemId = null;
-            unit.UpdatedDate = DateTime.UtcNow;
+            unit.UpdatedDate = DateTime.Now;
             unit.UpdatedBy = _currentUser.UserId;
         }
 
@@ -184,7 +184,7 @@ public sealed class ProductUnitService : IProductUnitService
         {
             unit.Status = ProductUnitStatus.Available;
             unit.BillItemId = null;
-            unit.UpdatedDate = DateTime.UtcNow;
+            unit.UpdatedDate = DateTime.Now;
             unit.UpdatedBy = _currentUser.UserId;
         }
 
@@ -222,7 +222,7 @@ public sealed class ProductUnitService : IProductUnitService
         foreach (var unit in units)
         {
             unit.StoreId = toStoreId;
-            unit.UpdatedDate = DateTime.UtcNow;
+            unit.UpdatedDate = DateTime.Now;
             unit.UpdatedBy = _currentUser.UserId;
         }
 
@@ -257,7 +257,7 @@ public sealed class ProductUnitService : IProductUnitService
         foreach (var unit in units)
         {
             unit.Status = ProductUnitStatus.Removed;
-            unit.UpdatedDate = DateTime.UtcNow;
+            unit.UpdatedDate = DateTime.Now;
             unit.UpdatedBy = _currentUser.UserId;
         }
 
@@ -428,7 +428,7 @@ public sealed class ProductUnitService : IProductUnitService
         unit.SellingPrice = Money.Round(request.SellingPrice);
         unit.MRP = Money.Round(request.MRP);
         unit.PurchasePrice = Money.Round(request.PurchasePrice ?? unit.PurchasePrice ?? unit.Product.PurchasePrice);
-        unit.UpdatedDate = DateTime.UtcNow;
+        unit.UpdatedDate = DateTime.Now;
         unit.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         return MapDto(unit);
@@ -452,7 +452,7 @@ public sealed class ProductUnitService : IProductUnitService
 
         var tracked = await _db.Categories.FirstAsync(c => c.Id == category.Id, cancellationToken);
         tracked.CodePrefix = prefix;
-        tracked.UpdatedDate = DateTime.UtcNow;
+        tracked.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(cancellationToken);
         category.CodePrefix = prefix;
         return prefix;
@@ -471,7 +471,7 @@ public sealed class ProductUnitService : IProductUnitService
         var seq = await _db.ProductUnitSequences.FirstAsync(s => s.Prefix == prefix, cancellationToken);
         var start = seq.LastNumber + 1;
         seq.LastNumber += count;
-        seq.UpdatedDate = DateTime.UtcNow;
+        seq.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(cancellationToken);
         return start;
     }
@@ -487,7 +487,7 @@ public sealed class ProductUnitService : IProductUnitService
         {
             Prefix = prefix,
             LastNumber = 0,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             IsActive = true
         });
 

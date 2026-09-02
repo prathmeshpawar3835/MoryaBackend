@@ -213,7 +213,7 @@ public sealed class BillingService : IBillingService
             }
 
             customer.WalletBalance = Money.Round(customer.WalletBalance - request.WalletRedeemAmount);
-            customer.UpdatedDate = DateTime.UtcNow;
+            customer.UpdatedDate = DateTime.Now;
         }
 
         if (creditPayment > 0 && customer is null)
@@ -239,7 +239,7 @@ public sealed class BillingService : IBillingService
             CustomerId = customer?.Id,
             SalesPersonId = salesPersonId,
             BillNumber = billNumber,
-            BillDate = DateTime.UtcNow,
+            BillDate = DateTime.Now,
             BillType = billType,
             Status = status,
             Subtotal = totals.Subtotal,
@@ -276,7 +276,7 @@ public sealed class BillingService : IBillingService
             PayableAmount = payable,
             Notes = request.Notes,
             ExchangeOfBillId = exchangeOfBillId,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         };
@@ -300,7 +300,7 @@ public sealed class BillingService : IBillingService
                 TaxPercent = calc.TaxPercent,
                 TaxAmount = calc.TaxAmount,
                 Total = calc.Total,
-                CreatedDate = DateTime.UtcNow,
+                CreatedDate = DateTime.Now,
                 IsActive = true
             };
             _db.BillItems.Add(billItem);
@@ -328,9 +328,9 @@ public sealed class BillingService : IBillingService
                 PaymentMode = payment.PaymentMode,
                 Amount = Money.Round(payment.Amount),
                 ReferenceNumber = payment.ReferenceNumber,
-                PaymentDate = DateTime.UtcNow,
+                PaymentDate = DateTime.Now,
                 UserId = _currentUser.UserId,
-                CreatedDate = DateTime.UtcNow,
+                CreatedDate = DateTime.Now,
                 IsActive = true
             });
         }
@@ -375,7 +375,7 @@ public sealed class BillingService : IBillingService
                     ReferenceId = bill.Id,
                     ReferenceNumber = billNumber,
                     UserId = _currentUser.UserId,
-                    CreatedDate = DateTime.UtcNow,
+                    CreatedDate = DateTime.Now,
                     IsActive = true
                 });
                 await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, request.WalletRedeemAmount, LedgerTransactionType.WalletRedeem, $"Credit used in sale {billNumber}", cancellationToken);
@@ -384,7 +384,7 @@ public sealed class BillingService : IBillingService
             if (creditGenerated > 0)
             {
                 customer.WalletBalance = Money.Round(customer.WalletBalance + creditGenerated);
-                customer.UpdatedDate = DateTime.UtcNow;
+                customer.UpdatedDate = DateTime.Now;
                 _db.WalletTransactions.Add(new WalletTransaction
                 {
                     CustomerId = customer.Id,
@@ -396,7 +396,7 @@ public sealed class BillingService : IBillingService
                     ReferenceId = bill.Id,
                     ReferenceNumber = billNumber,
                     UserId = _currentUser.UserId,
-                    CreatedDate = DateTime.UtcNow,
+                    CreatedDate = DateTime.Now,
                     IsActive = true
                 });
             }
@@ -425,7 +425,7 @@ public sealed class BillingService : IBillingService
             {
                 _currentUser.Access().EnsureStoreAccess(held.StoreId);
                 held.IsDeleted = true;
-                held.UpdatedDate = DateTime.UtcNow;
+                held.UpdatedDate = DateTime.Now;
             }
         }
 
@@ -501,12 +501,12 @@ public sealed class BillingService : IBillingService
             if (bill.WalletRedeemed > 0)
             {
                 customer.WalletBalance = Money.Round(customer.WalletBalance + bill.WalletRedeemed);
-                customer.UpdatedDate = DateTime.UtcNow;
+                customer.UpdatedDate = DateTime.Now;
             }
         }
 
         bill.Status = BillStatus.Cancelled;
-        bill.UpdatedDate = DateTime.UtcNow;
+        bill.UpdatedDate = DateTime.Now;
         bill.Notes = string.IsNullOrWhiteSpace(reason) ? bill.Notes : $"{bill.Notes} | Cancel: {reason}";
         await _birthdays.ReleaseRedemptionForCancelledBillAsync(bill.Id, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
@@ -649,11 +649,11 @@ public sealed class BillingService : IBillingService
             StoreId = storeId,
             CustomerId = request.CustomerId,
             SalesPersonId = _currentUser.UserId,
-            HoldReference = $"HOLD-{DateTime.UtcNow:yyyyMMddHHmmss}-{storeId}",
+            HoldReference = $"HOLD-{DateTime.Now:yyyyMMddHHmmss}-{storeId}",
             Notes = request.Notes,
             BillDiscount = request.BillDiscount,
             ItemsJson = JsonSerializer.Serialize(request.Items),
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         };
@@ -704,7 +704,7 @@ public sealed class BillingService : IBillingService
             ?? throw new NotFoundAppException("Held bill not found.");
         _currentUser.Access().EnsureStoreAccess(held.StoreId);
         held.IsDeleted = true;
-        held.UpdatedDate = DateTime.UtcNow;
+        held.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(cancellationToken);
     }
 
@@ -824,13 +824,13 @@ public sealed class BillingService : IBillingService
             Balance = balance,
             TransactionType = type,
             Description = description,
-            TransactionDate = DateTime.UtcNow,
+            TransactionDate = DateTime.Now,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             IsActive = true
         });
         customer.OutstandingBalance = balance;
-        customer.UpdatedDate = DateTime.UtcNow;
+        customer.UpdatedDate = DateTime.Now;
     }
 
     private sealed record AppliedStoreDiscount(decimal Amount, string? Name, decimal Percent);
@@ -854,7 +854,7 @@ public sealed class BillingService : IBillingService
             throw new BusinessAppException("The selected discount is not active for this store.");
         }
 
-        var today = DateTime.UtcNow.Date;
+        var today = DateTime.Now.Date;
         if (discount.ValidFrom.HasValue && today < discount.ValidFrom.Value.Date)
         {
             throw new BusinessAppException("The selected discount is not yet valid.");

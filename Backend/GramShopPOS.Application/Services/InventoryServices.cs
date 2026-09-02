@@ -209,14 +209,14 @@ public sealed class InventoryService : IInventoryService
         await using var tx = await _db.BeginTransactionAsync(cancellationToken);
         var transfer = new StockTransfer
         {
-            TransferNumber = $"TR-{DateTime.UtcNow:yyyyMMddHHmmss}-{request.FromStoreId}",
+            TransferNumber = $"TR-{DateTime.Now:yyyyMMddHHmmss}-{request.FromStoreId}",
             FromStoreId = request.FromStoreId,
             ToStoreId = request.ToStoreId,
-            TransferDate = DateTime.UtcNow,
+            TransferDate = DateTime.Now,
             Status = StockTransferStatus.Completed,
             Reason = request.Reason,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         };
@@ -230,7 +230,7 @@ public sealed class InventoryService : IInventoryService
                 StockTransferId = transfer.Id,
                 ProductId = item.ProductId,
                 Quantity = item.Quantity,
-                CreatedDate = DateTime.UtcNow,
+                CreatedDate = DateTime.Now,
                 IsActive = true
             });
             await _stock.ChangeAsync(request.FromStoreId, item.ProductId, -item.Quantity, StockMovementType.TransferOut, transfer.Id, transfer.TransferNumber, request.Reason, settings.AllowNegativeStock, _currentUser.UserId, cancellationToken);
@@ -344,10 +344,10 @@ public sealed class PurchaseService : IPurchaseService
             SupplierId = supplierId,
             SupplierName = supplierName,
             InvoiceNumber = request.InvoiceNumber.Trim(),
-            PurchaseDate = request.Date ?? DateTime.UtcNow,
+            PurchaseDate = request.Date ?? DateTime.Now,
             Notes = request.Notes,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.UtcNow,
+            CreatedDate = DateTime.Now,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         };
@@ -376,7 +376,7 @@ public sealed class PurchaseService : IPurchaseService
                 Quantity = item.Quantity,
                 PurchasePrice = Money.Round(item.PurchasePrice),
                 Total = lineTotal,
-                CreatedDate = DateTime.UtcNow,
+                CreatedDate = DateTime.Now,
                 IsActive = true
             });
             await _stock.ChangeAsync(request.StoreId, item.ProductId, item.Quantity, StockMovementType.Purchase, purchase.Id, purchase.InvoiceNumber, "Purchase stock-in", false, _currentUser.UserId, cancellationToken);
