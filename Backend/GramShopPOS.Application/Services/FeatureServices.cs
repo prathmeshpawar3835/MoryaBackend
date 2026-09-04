@@ -81,7 +81,7 @@ public sealed class DiscountService : IDiscountService
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
             IsActive = request.IsActive,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId
         };
         _db.StoreDiscounts.Add(entity);
@@ -104,7 +104,7 @@ public sealed class DiscountService : IDiscountService
         entity.ValidFrom = request.ValidFrom;
         entity.ValidTo = request.ValidTo;
         entity.IsActive = request.IsActive;
-        entity.UpdatedDate = DateTime.Now;
+        entity.UpdatedDate = DateTime.UtcNow;
         entity.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.DiscountUpdated, nameof(StoreDiscount), id.ToString(), null, entity, entity.StoreId, cancellationToken);
@@ -118,7 +118,7 @@ public sealed class DiscountService : IDiscountService
             ?? throw new NotFoundAppException("Discount not found.");
         entity.IsDeleted = true;
         entity.IsActive = false;
-        entity.UpdatedDate = DateTime.Now;
+        entity.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
     }
 
@@ -204,7 +204,7 @@ public sealed class SupplierService : ISupplierService
         }
 
         var entity = MapRequest(new Supplier(), request);
-        entity.CreatedDate = DateTime.Now;
+        entity.CreatedDate = DateTime.UtcNow;
         entity.CreatedBy = _currentUser.UserId;
         entity.IsActive = request.IsActive;
         _db.Suppliers.Add(entity);
@@ -219,7 +219,7 @@ public sealed class SupplierService : ISupplierService
         var entity = await _db.Suppliers.FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Supplier not found.");
         MapRequest(entity, request);
-        entity.UpdatedDate = DateTime.Now;
+        entity.UpdatedDate = DateTime.UtcNow;
         entity.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.SupplierUpdated, nameof(Supplier), id.ToString(), null, entity, entity.StoreId, cancellationToken);
@@ -396,7 +396,7 @@ public sealed class RepairService : IRepairService
             BillId = request.BillId,
             BillItemId = request.BillItemId,
             ProductId = request.ProductId,
-            JobNumber = $"RP-{DateTime.Now:yyyyMMddHHmmss}-{storeId}",
+            JobNumber = $"RP-{DateTime.UtcNow:yyyyMMddHHmmss}-{storeId}",
             CustomerName = request.CustomerName.Trim(),
             MobileNumber = request.MobileNumber.Trim(),
             InvoiceNumber = request.InvoiceNumber,
@@ -404,7 +404,7 @@ public sealed class RepairService : IRepairService
             ProductDetails = request.ProductDetails,
             JobType = request.JobType,
             Status = RepairJobStatus.Received,
-            ReceivedDate = DateTime.Now,
+            ReceivedDate = DateTime.UtcNow,
             ExpectedDate = request.ExpectedDate,
             Notes = request.Notes,
             EstimatedAmount = Money.Round(request.EstimatedAmount),
@@ -413,7 +413,7 @@ public sealed class RepairService : IRepairService
             PaymentMode = paid > 0 ? request.PaymentMode : null,
             PaymentReference = paid > 0 ? request.PaymentReference : null,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         };
@@ -464,15 +464,15 @@ public sealed class RepairService : IRepairService
 
         if (request.Status == RepairJobStatus.Ready || request.Status == RepairJobStatus.Delivered)
         {
-            job.CompletedDate ??= DateTime.Now;
+            job.CompletedDate ??= DateTime.UtcNow;
         }
 
         if (request.Status == RepairJobStatus.Delivered)
         {
-            job.DeliveredDate = DateTime.Now;
+            job.DeliveredDate = DateTime.UtcNow;
         }
 
-        job.UpdatedDate = DateTime.Now;
+        job.UpdatedDate = DateTime.UtcNow;
         job.UpdatedBy = _currentUser.UserId;
         AddHistory(job, request.Status, request.Notes);
         await _db.SaveChangesAsync(cancellationToken);
@@ -511,7 +511,7 @@ public sealed class RepairService : IRepairService
         job.PaidAmount = Money.Round(job.PaidAmount + request.Amount);
         job.PaymentMode = request.PaymentMode;
         job.PaymentReference = request.ReferenceNumber;
-        job.UpdatedDate = DateTime.Now;
+        job.UpdatedDate = DateTime.UtcNow;
         job.UpdatedBy = _currentUser.UserId;
         if (job.CustomerId.HasValue)
         {
@@ -564,9 +564,9 @@ public sealed class RepairService : IRepairService
             Balance = balance,
             TransactionType = type,
             Description = description,
-            TransactionDate = DateTime.Now,
+            TransactionDate = DateTime.UtcNow,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
         customer.OutstandingBalance = balance;
@@ -579,7 +579,7 @@ public sealed class RepairService : IRepairService
             Status = status,
             Notes = notes,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
 

@@ -85,7 +85,7 @@ public sealed class ReturnDocumentService : IReturnDocumentService
             OriginalBillId = bill.Id,
             OriginalBillNumber = bill.BillNumber,
             ReturnNumber = returnNumber,
-            ReturnDate = DateTime.Now,
+            ReturnDate = DateTime.UtcNow,
             CustomerId = bill.CustomerId,
             Reason = request.Reason,
             ReturnKind = kind,
@@ -93,7 +93,7 @@ public sealed class ReturnDocumentService : IReturnDocumentService
             SalesPersonId = salesPersonId,
             ExchangeBillId = options.ExchangeBillId,
             AppliedToBillId = options.AppliedToBillId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         };
@@ -139,7 +139,7 @@ public sealed class ReturnDocumentService : IReturnDocumentService
                 Rate = billItem.Rate,
                 TaxAmount = Money.Round(billItem.TaxAmount * (item.Quantity / billItem.Quantity)),
                 Total = lineNet,
-                CreatedDate = DateTime.Now,
+                CreatedDate = DateTime.UtcNow,
                 IsActive = true
             };
             _db.ReturnItems.Add(row);
@@ -211,9 +211,9 @@ public sealed class ReturnDocumentService : IReturnDocumentService
                 Balance = balance,
                 TransactionType = ledgerType,
                 Description = $"{kind} {returnNumber} against {bill.BillNumber}",
-                TransactionDate = DateTime.Now,
+                TransactionDate = DateTime.UtcNow,
                 UserId = _currentUser.UserId,
-                CreatedDate = DateTime.Now,
+                CreatedDate = DateTime.UtcNow,
                 IsActive = true
             });
             customer.OutstandingBalance = balance;
@@ -231,7 +231,7 @@ public sealed class ReturnDocumentService : IReturnDocumentService
                     ReferenceId = ret.Id,
                     ReferenceNumber = returnNumber,
                     UserId = _currentUser.UserId,
-                    CreatedDate = DateTime.Now,
+                    CreatedDate = DateTime.UtcNow,
                     IsActive = true
                 });
             }

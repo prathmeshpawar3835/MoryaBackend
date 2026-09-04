@@ -109,7 +109,7 @@ public sealed class CustomerService : ICustomerService
             ReferralCode = await CustomerReferral.NextCodeAsync(_db, cancellationToken),
             CustomerCode = UniqueTempCode(),
             ReferredByCustomerId = referrerId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId,
             IsActive = true
         };
@@ -138,7 +138,7 @@ public sealed class CustomerService : ICustomerService
         customer.Address = request.Address;
         customer.DateOfBirth = request.DateOfBirth;
         customer.IsActive = request.IsActive;
-        customer.UpdatedDate = DateTime.Now;
+        customer.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.CustomerUpdated, nameof(Customer), id.ToString(), null, customer, customer.StoreId, cancellationToken);
         return await GetByIdAsync(id, cancellationToken);
@@ -359,10 +359,10 @@ public sealed class CustomerService : ICustomerService
             PaymentMode = request.PaymentMode,
             Amount = Money.Round(request.Amount),
             ReferenceNumber = request.ReferenceNumber,
-            PaymentDate = request.PaymentDate ?? DateTime.Now,
+            PaymentDate = request.PaymentDate ?? DateTime.UtcNow,
             Notes = request.Notes,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         };
         _db.Payments.Add(payment);
@@ -374,7 +374,7 @@ public sealed class CustomerService : ICustomerService
             PaymentId = payment.Id,
             Amount = payment.Amount,
             Notes = request.Notes,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
 
@@ -393,7 +393,7 @@ public sealed class CustomerService : ICustomerService
             Description = request.Notes ?? "Customer payment",
             TransactionDate = payment.PaymentDate,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
         customer.OutstandingBalance = balance;
@@ -475,7 +475,7 @@ public sealed class CustomerService : ICustomerService
             TransactionType = LedgerTransactionType.WalletRedeem,
             Description = request.Notes ?? "Wallet redemption",
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
         var latest = await _db.CustomerLedgers.Where(l => l.CustomerId == customerId).OrderByDescending(l => l.Id).Select(l => (decimal?)l.Balance).FirstOrDefaultAsync(cancellationToken) ?? 0;
@@ -489,13 +489,13 @@ public sealed class CustomerService : ICustomerService
             Balance = balance,
             TransactionType = LedgerTransactionType.WalletRedeem,
             Description = request.Notes ?? "Wallet redemption",
-            TransactionDate = DateTime.Now,
+            TransactionDate = DateTime.UtcNow,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
         customer.OutstandingBalance = balance;
-        customer.UpdatedDate = DateTime.Now;
+        customer.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.WalletUsed, nameof(Customer), customerId.ToString(), null, new { request.Amount }, storeId, cancellationToken);

@@ -43,7 +43,7 @@ public sealed class AuditService : IAuditService
             OldValue = SerializeSafe(oldValue),
             NewValue = SerializeSafe(newValue),
             IpAddress = _currentUser.IpAddress,
-            CreatedDate = DateTime.Now
+            CreatedDate = DateTime.UtcNow
         });
 
         await _db.SaveChangesAsync(cancellationToken);

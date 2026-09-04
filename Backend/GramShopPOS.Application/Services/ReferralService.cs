@@ -226,9 +226,9 @@ public sealed class ReferralService : IReferralService
                 BillId = bill.Id,
                 SalesPersonId = bill.SalesPersonId,
                 ReferralCode = referrer.ReferralCode,
-                ReferralDate = DateTime.Now,
+                ReferralDate = DateTime.UtcNow,
                 Status = ReferralRewardStatus.Pending,
-                CreatedDate = DateTime.Now,
+                CreatedDate = DateTime.UtcNow,
                 IsActive = true
             };
             _db.Referrals.Add(existing);
@@ -394,7 +394,7 @@ public sealed class ReferralService : IReferralService
             ReferenceId = bill.Id,
             ReferenceNumber = bill.BillNumber,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
         var ledger = await AddLedgerAsync(
@@ -418,7 +418,7 @@ public sealed class ReferralService : IReferralService
             IsReferrerReward = true,
             IsReversal = false,
             Description = $"Referral credit {bill.BillNumber}",
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
         await _db.SaveChangesAsync(cancellationToken);
@@ -463,7 +463,7 @@ public sealed class ReferralService : IReferralService
                 ReferenceId = ret.Id,
                 ReferenceNumber = ret.ReturnNumber,
                 UserId = _currentUser.UserId,
-                CreatedDate = DateTime.Now,
+                CreatedDate = DateTime.UtcNow,
                 IsActive = true
             });
         }
@@ -490,7 +490,7 @@ public sealed class ReferralService : IReferralService
             IsReferrerReward = true,
             IsReversal = true,
             Description = description,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
         await _db.SaveChangesAsync(cancellationToken);
@@ -523,14 +523,14 @@ public sealed class ReferralService : IReferralService
             Balance = balance,
             TransactionType = type,
             Description = description,
-            TransactionDate = DateTime.Now,
+            TransactionDate = DateTime.UtcNow,
             UserId = _currentUser.UserId,
-            CreatedDate = DateTime.Now,
+            CreatedDate = DateTime.UtcNow,
             IsActive = true
         };
         _db.CustomerLedgers.Add(entry);
         customer.OutstandingBalance = balance;
-        customer.UpdatedDate = DateTime.Now;
+        customer.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         return entry;
     }

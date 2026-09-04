@@ -32,7 +32,7 @@ public sealed class DocumentNumberGenerator : IDocumentNumberGenerator
         CancellationToken cancellationToken)
         where TSequence : class
     {
-        var fy = FinancialYear.GetCode(DateTime.Now, financialYearStartMonth);
+        var fy = FinancialYear.GetCode(DateTime.UtcNow, financialYearStartMonth);
         await EnsureRowAsync(set, tableName, storeId, prefix, fy, cancellationToken);
         var next = await IncrementAsync(tableName, storeId, fy, cancellationToken);
         return $"{prefix}-FY{fy}-{next:000000}";
@@ -60,7 +60,7 @@ public sealed class DocumentNumberGenerator : IDocumentNumberGenerator
                 FinancialYearCode = fy,
                 Prefix = prefix,
                 LastNumber = 0,
-                CreatedDate = DateTime.Now,
+                CreatedDate = DateTime.UtcNow,
                 IsActive = true
             });
         }
@@ -77,7 +77,7 @@ public sealed class DocumentNumberGenerator : IDocumentNumberGenerator
                 FinancialYearCode = fy,
                 Prefix = prefix,
                 LastNumber = 0,
-                CreatedDate = DateTime.Now,
+                CreatedDate = DateTime.UtcNow,
                 IsActive = true
             });
         }
@@ -104,14 +104,14 @@ public sealed class DocumentNumberGenerator : IDocumentNumberGenerator
         {
             var seq = await _db.BillSequences.FirstAsync(x => x.StoreId == storeId && x.FinancialYearCode == fy, cancellationToken);
             seq.LastNumber += 1;
-            seq.UpdatedDate = DateTime.Now;
+            seq.UpdatedDate = DateTime.UtcNow;
             await _db.SaveChangesAsync(cancellationToken);
             return seq.LastNumber;
         }
 
         var ret = await _db.ReturnSequences.FirstAsync(x => x.StoreId == storeId && x.FinancialYearCode == fy, cancellationToken);
         ret.LastNumber += 1;
-        ret.UpdatedDate = DateTime.Now;
+        ret.UpdatedDate = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         return ret.LastNumber;
     }
