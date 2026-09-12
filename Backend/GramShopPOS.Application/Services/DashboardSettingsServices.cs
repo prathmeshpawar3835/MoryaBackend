@@ -394,6 +394,7 @@ public sealed class SettingsService : ISettingsService
             s.WhatsAppAccessToken = request.WhatsAppAccessToken;
         }
         s.WhatsAppApiBaseUrl = request.WhatsAppApiBaseUrl;
+        s.EcommerceNotifyMobile = string.IsNullOrWhiteSpace(request.EcommerceNotifyMobile) ? null : request.EcommerceNotifyMobile.Trim();
         s.UpdatedDate = DateTime.UtcNow;
         s.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
@@ -431,6 +432,7 @@ public sealed class SettingsService : ISettingsService
         WhatsAppPhoneNumberId = s.WhatsAppPhoneNumberId,
         WhatsAppAccessToken = string.IsNullOrWhiteSpace(s.WhatsAppAccessToken) ? null : "********",
         WhatsAppApiBaseUrl = s.WhatsAppApiBaseUrl,
+        EcommerceNotifyMobile = s.EcommerceNotifyMobile,
         TaxSettings = taxes
     };
 }

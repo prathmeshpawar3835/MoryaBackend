@@ -106,6 +106,7 @@ public interface IPurchaseService
 public interface IBillingService
 {
     Task<BillDto> CreateBillAsync(CreateBillRequest request, CancellationToken cancellationToken = default);
+    Task<BillDto> CreateEcommerceBillAsync(CreateBillRequest request, CancellationToken cancellationToken = default);
     Task<PagedResponse<BillDto>> GetBillsAsync(BillListRequest request, CancellationToken cancellationToken = default);
     Task<BillDto> GetBillAsync(int id, CancellationToken cancellationToken = default);
     Task<PagedResponse<BillDto>> SearchBillsAsync(BillListRequest request, CancellationToken cancellationToken = default);
@@ -159,7 +160,7 @@ public interface IReferralService
 
 public interface IDiscountService
 {
-    Task<IReadOnlyList<DTOs.Operations.StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, Domain.Enums.OfferCategory? category = null, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DTOs.Operations.StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, Domain.Enums.OfferCategory? category = null, bool includeEcommerceOnly = false, CancellationToken cancellationToken = default);
     Task<DTOs.Operations.StoreDiscountDto> CreateAsync(DTOs.Operations.StoreDiscountRequest request, CancellationToken cancellationToken = default);
     Task<DTOs.Operations.StoreDiscountDto> UpdateAsync(int id, DTOs.Operations.StoreDiscountRequest request, CancellationToken cancellationToken = default);
     Task DeleteAsync(int id, CancellationToken cancellationToken = default);
@@ -261,6 +262,21 @@ public interface IDocumentNumberGenerator
 {
     Task<string> NextBillNumberAsync(int storeId, string prefix, int financialYearStartMonth, CancellationToken cancellationToken = default);
     Task<string> NextReturnNumberAsync(int storeId, string prefix, int financialYearStartMonth, CancellationToken cancellationToken = default);
+}
+
+public interface IEcommerceService
+{
+    Task<DTOs.Ecommerce.ShopInfoDto> GetShopInfoAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DTOs.Catalog.CategoryDto>> GetCategoriesAsync(CancellationToken cancellationToken = default);
+    Task<PagedResponse<DTOs.Ecommerce.ShopProductDto>> GetCatalogAsync(DTOs.Ecommerce.ShopCatalogRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Ecommerce.ShopProductDetailDto> GetProductAsync(int id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DTOs.Ecommerce.ShopOfferDto>> GetOffersAsync(CancellationToken cancellationToken = default);
+    Task<DTOs.Ecommerce.ShopAuthResponse> RegisterAsync(DTOs.Ecommerce.ShopRegisterRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Ecommerce.ShopAuthResponse> LoginAsync(DTOs.Ecommerce.ShopLoginRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Ecommerce.ShopCustomerDto> GetMeAsync(CancellationToken cancellationToken = default);
+    Task<PagedResponse<DTOs.Ecommerce.ShopOrderDto>> GetOrdersAsync(PagedRequest request, CancellationToken cancellationToken = default);
+    Task<DTOs.Ecommerce.ShopOrderDto> GetOrderAsync(int id, CancellationToken cancellationToken = default);
+    Task<DTOs.Ecommerce.ShopCheckoutResponse> CheckoutAsync(DTOs.Ecommerce.ShopCheckoutRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface IExcelWorkbookService

@@ -52,4 +52,7 @@ public static class AuditActions
     public const string InvoiceWhatsAppFailed = "InvoiceWhatsAppFailed";
     public const string DocumentWhatsAppSent = "DocumentWhatsAppSent";
     public const string DocumentWhatsAppFailed = "DocumentWhatsAppFailed";
+    public const string EcommerceOrderCreated = "EcommerceOrderCreated";
+    public const string EcommerceOrderWhatsAppSent = "EcommerceOrderWhatsAppSent";
+    public const string EcommerceOrderWhatsAppFailed = "EcommerceOrderWhatsAppFailed";
 }

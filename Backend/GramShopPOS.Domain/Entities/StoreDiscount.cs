@@ -12,6 +12,7 @@ public class StoreDiscount : BaseEntity
     public decimal Value { get; set; }
     public DateTime? ValidFrom { get; set; }
     public DateTime? ValidTo { get; set; }
+    public bool EcommerceOnly { get; set; }
 
     public Store Store { get; set; } = null!;
 }

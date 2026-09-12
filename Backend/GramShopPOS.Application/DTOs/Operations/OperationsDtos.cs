@@ -15,6 +15,7 @@ public class StoreDiscountDto
     public DateTime? ValidFrom { get; set; }
     public DateTime? ValidTo { get; set; }
     public bool IsActive { get; set; }
+    public bool EcommerceOnly { get; set; }
 }
 
 public class StoreDiscountRequest
@@ -28,6 +29,7 @@ public class StoreDiscountRequest
     public DateTime? ValidFrom { get; set; }
     public DateTime? ValidTo { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool EcommerceOnly { get; set; }
 }
 
 public class SupplierDto

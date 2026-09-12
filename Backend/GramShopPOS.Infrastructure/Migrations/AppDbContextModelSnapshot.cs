@@ -741,6 +741,10 @@ namespace GramShopPOS.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("EcommerceNotifyMobile")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.HasKey("Id");
 
                     b.ToTable("BusinessSettings", (string)null);
@@ -836,6 +840,10 @@ namespace GramShopPOS.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<decimal>("OutstandingBalance")
                         .HasPrecision(18, 2)
@@ -2531,6 +2539,9 @@ namespace GramShopPOS.Infrastructure.Migrations
 
                     b.Property<int>("DiscountKind")
                         .HasColumnType("int");
+
+                    b.Property<bool>("EcommerceOnly")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");

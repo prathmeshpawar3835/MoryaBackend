@@ -17,8 +17,8 @@ public sealed class DiscountsController : ControllerBase
     public DiscountsController(IDiscountService discounts) => _discounts = discounts;
 
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] int? storeId, [FromQuery] bool activeOnly, [FromQuery] OfferCategory? category, CancellationToken cancellationToken) =>
-        Ok(await _discounts.GetAsync(storeId, activeOnly, category, cancellationToken));
+    public async Task<IActionResult> Get([FromQuery] int? storeId, [FromQuery] bool activeOnly, [FromQuery] OfferCategory? category, [FromQuery] bool includeEcommerceOnly, CancellationToken cancellationToken) =>
+        Ok(await _discounts.GetAsync(storeId, activeOnly, category, includeEcommerceOnly, cancellationToken));
 
     [Authorize(Roles = Roles.Admin)]
     [HttpPost]

@@ -69,6 +69,7 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(x => x.CustomerCode).HasMaxLength(20).IsRequired();
         builder.HasIndex(x => x.CustomerCode).IsUnique();
         builder.Property(x => x.Address).HasMaxLength(500);
+        builder.Property(x => x.PasswordHash).HasMaxLength(500);
         builder.Property(x => x.DateOfBirth);
         builder.Property(x => x.OutstandingBalance).Money();
         builder.Property(x => x.WalletBalance).Money();

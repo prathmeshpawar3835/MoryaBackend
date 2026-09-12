@@ -22,10 +22,14 @@ public sealed class DiscountService : IDiscountService
         _audit = audit;
     }
 
-    public async Task<IReadOnlyList<StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, OfferCategory? category = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<StoreDiscountDto>> GetAsync(int? storeId, bool activeOnly, OfferCategory? category = null, bool includeEcommerceOnly = false, CancellationToken cancellationToken = default)
     {
         _currentUser.EnsureAuthenticated();
         var query = _db.StoreDiscounts.AsNoTracking().Where(d => !d.IsDeleted);
+        if (!includeEcommerceOnly)
+        {
+            query = query.Where(d => !d.EcommerceOnly);
+        }
         if (!_currentUser.IsAdmin)
         {
             var ids = _currentUser.AssignedStoreIds;
@@ -61,7 +65,8 @@ public sealed class DiscountService : IDiscountService
             Value = d.Value,
             ValidFrom = d.ValidFrom,
             ValidTo = d.ValidTo,
-            IsActive = d.IsActive
+            IsActive = d.IsActive,
+            EcommerceOnly = d.EcommerceOnly
         }).ToListAsync(cancellationToken);
     }
 
@@ -81,6 +86,7 @@ public sealed class DiscountService : IDiscountService
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
             IsActive = request.IsActive,
+            EcommerceOnly = request.EcommerceOnly,
             CreatedDate = DateTime.UtcNow,
             CreatedBy = _currentUser.UserId
         };
@@ -104,6 +110,7 @@ public sealed class DiscountService : IDiscountService
         entity.ValidFrom = request.ValidFrom;
         entity.ValidTo = request.ValidTo;
         entity.IsActive = request.IsActive;
+        entity.EcommerceOnly = request.EcommerceOnly;
         entity.UpdatedDate = DateTime.UtcNow;
         entity.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);

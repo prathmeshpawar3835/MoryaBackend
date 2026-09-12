@@ -32,6 +32,7 @@ public class SettingsDto
     public string? WhatsAppPhoneNumberId { get; set; }
     public string? WhatsAppAccessToken { get; set; }
     public string? WhatsAppApiBaseUrl { get; set; }
+    public string? EcommerceNotifyMobile { get; set; }
     public IReadOnlyList<TaxSettingDto> TaxSettings { get; set; } = [];
 }
 

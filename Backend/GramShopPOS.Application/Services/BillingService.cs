@@ -66,12 +66,27 @@ public sealed class BillingService : IBillingService
         return dto;
     }
 
+    public async Task<BillDto> CreateEcommerceBillAsync(CreateBillRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.Items.Count == 0)
+        {
+            throw new ValidationAppException("A bill must contain at least one item.");
+        }
+
+        await using var tx = await _db.BeginTransactionAsync(cancellationToken);
+        var dto = await CreateBillCoreAsync(request, request.StoreId, BillType.Sale, null, cancellationToken, allowEcommerceDiscounts: true);
+        await tx.CommitAsync(cancellationToken);
+        await _audit.LogAsync(AuditActions.EcommerceOrderCreated, nameof(Bill), dto.Id.ToString(), null, new { dto.BillNumber, dto.GrandTotal, Channel = "Ecommerce" }, request.StoreId, cancellationToken);
+        return dto;
+    }
+
     internal async Task<BillDto> CreateBillCoreAsync(
         CreateBillRequest request,
         int storeId,
         BillType billType,
         int? exchangeOfBillId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowEcommerceDiscounts = false)
     {
         var settings = await _db.BusinessSettings.FirstAsync(cancellationToken);
         var store = await _db.Stores.FirstOrDefaultAsync(s => s.Id == storeId && s.IsActive && !s.IsDeleted, cancellationToken)
@@ -82,7 +97,7 @@ public sealed class BillingService : IBillingService
         {
             customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.CustomerId && !c.IsDeleted, cancellationToken)
                 ?? throw new NotFoundAppException("Customer not found.");
-            _currentUser.Access().EnsureStoreAccess(customer.StoreId);
+            EnsureCustomerAccess(customer);
         }
 
         var productIds = request.Items.Select(i => i.ProductId).Distinct().ToList();
@@ -111,7 +126,7 @@ public sealed class BillingService : IBillingService
         }
 
         var eligible = Money.Round(lineInputs.Sum(l => (l.Qty * l.Rate) - l.Discount));
-        var storeDiscount = await ResolveStoreDiscountAsync(request.StoreDiscountId, storeId, eligible, cancellationToken);
+        var storeDiscount = await ResolveStoreDiscountAsync(request.StoreDiscountId, storeId, eligible, allowEcommerceDiscounts, cancellationToken);
         var storeDiscountAmount = storeDiscount.Amount;
         var referralPreview = billType == BillType.Sale && customer is not null
             ? await _referrals.PreviewAsync(customer, request.ReferralCode, request.ReferringMobileNumber, eligible, storeId, cancellationToken)
@@ -136,6 +151,7 @@ public sealed class BillingService : IBillingService
             combinedDiscount);
 
         var salesPersonId = await StaffResolver.ResolveSalesPersonIdAsync(_db, _currentUser, storeId, request.SalesPersonId, cancellationToken);
+        var actorUserId = StaffActorId(salesPersonId);
 
         var adjustments = request.Adjustments ?? [];
         if (adjustments.Count > 0 && customer is null)
@@ -277,7 +293,7 @@ public sealed class BillingService : IBillingService
             Notes = request.Notes,
             ExchangeOfBillId = exchangeOfBillId,
             CreatedDate = DateTime.UtcNow,
-            CreatedBy = _currentUser.UserId,
+            CreatedBy = actorUserId,
             IsActive = true
         };
         _db.Bills.Add(bill);
@@ -313,7 +329,7 @@ public sealed class BillingService : IBillingService
                 billNumber,
                 null,
                 settings.AllowNegativeStock,
-                _currentUser.UserId,
+                actorUserId,
                 cancellationToken);
             await _units.MarkSoldAsync(storeId, src.Product.Id, calc.Quantity, billItem.Id, src.Request.ProductUnitIds, cancellationToken);
         }
@@ -329,7 +345,7 @@ public sealed class BillingService : IBillingService
                 Amount = Money.Round(payment.Amount),
                 ReferenceNumber = payment.ReferenceNumber,
                 PaymentDate = DateTime.UtcNow,
-                UserId = _currentUser.UserId,
+                UserId = actorUserId,
                 CreatedDate = DateTime.UtcNow,
                 IsActive = true
             });
@@ -337,7 +353,7 @@ public sealed class BillingService : IBillingService
 
         if (customer is not null)
         {
-            await AddLedgerAsync(customer, storeId, bill.Id, billNumber, totals.GrandTotal, 0, LedgerTransactionType.Sale, $"Sale {billNumber}", cancellationToken);
+            await AddLedgerAsync(customer, storeId, bill.Id, billNumber, totals.GrandTotal, 0, LedgerTransactionType.Sale, $"Sale {billNumber}", cancellationToken, actorUserId);
             foreach (var adj in createdAdjustments)
             {
                 var type = adj.ReturnKind switch
@@ -346,7 +362,7 @@ public sealed class BillingService : IBillingService
                     ReturnKind.Buyback => LedgerTransactionType.Buyback,
                     _ => LedgerTransactionType.Return
                 };
-                await AddLedgerAsync(customer, storeId, adj.Id, adj.ReturnNumber, 0, adj.ReturnAmount, type, $"{adj.ReturnKind} {adj.ReturnNumber} applied to {billNumber}", cancellationToken);
+                await AddLedgerAsync(customer, storeId, adj.Id, adj.ReturnNumber, 0, adj.ReturnAmount, type, $"{adj.ReturnKind} {adj.ReturnNumber} applied to {billNumber}", cancellationToken, actorUserId);
             }
 
             var collectedTotal = Money.Round(collected.Sum(p => p.Amount));
@@ -354,12 +370,12 @@ public sealed class BillingService : IBillingService
             {
                 if (paid > 0)
                 {
-                    await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, paid, LedgerTransactionType.PaymentReceived, $"Payment against {billNumber}", cancellationToken);
+                    await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, paid, LedgerTransactionType.PaymentReceived, $"Payment against {billNumber}", cancellationToken, actorUserId);
                 }
             }
             else if (collectedTotal > 0)
             {
-                await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, collectedTotal, LedgerTransactionType.PaymentReceived, $"Payment against {billNumber}", cancellationToken);
+                await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, collectedTotal, LedgerTransactionType.PaymentReceived, $"Payment against {billNumber}", cancellationToken, actorUserId);
             }
 
             if (request.WalletRedeemAmount > 0)
@@ -374,11 +390,11 @@ public sealed class BillingService : IBillingService
                     Description = $"Redeemed on {billNumber}",
                     ReferenceId = bill.Id,
                     ReferenceNumber = billNumber,
-                    UserId = _currentUser.UserId,
+                    UserId = actorUserId,
                     CreatedDate = DateTime.UtcNow,
                     IsActive = true
                 });
-                await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, request.WalletRedeemAmount, LedgerTransactionType.WalletRedeem, $"Credit used in sale {billNumber}", cancellationToken);
+                await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, request.WalletRedeemAmount, LedgerTransactionType.WalletRedeem, $"Credit used in sale {billNumber}", cancellationToken, actorUserId);
             }
 
             if (creditGenerated > 0)
@@ -395,7 +411,7 @@ public sealed class BillingService : IBillingService
                     Description = $"Credit generated from exchange/return/buyback on {billNumber}",
                     ReferenceId = bill.Id,
                     ReferenceNumber = billNumber,
-                    UserId = _currentUser.UserId,
+                    UserId = actorUserId,
                     CreatedDate = DateTime.UtcNow,
                     IsActive = true
                 });
@@ -450,7 +466,17 @@ public sealed class BillingService : IBillingService
             .Include(b => b.StoreDiscount)
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken)
             ?? throw new NotFoundAppException("Bill not found.");
-        _currentUser.Access().EnsureStoreAccess(bill.StoreId);
+        if (string.Equals(_currentUser.Role, Roles.Customer, StringComparison.OrdinalIgnoreCase))
+        {
+            if (bill.CustomerId != _currentUser.UserId)
+            {
+                throw new ForbiddenAppException("You cannot view another customer's order.");
+            }
+        }
+        else
+        {
+            _currentUser.Access().EnsureStoreAccess(bill.StoreId);
+        }
         var dto = Map(bill, _currentUser.IsAdmin);
         var linked = await _db.Returns.AsNoTracking().Include(r => r.Items)
             .Include(r => r.SalesPerson)
@@ -806,7 +832,8 @@ public sealed class BillingService : IBillingService
         decimal credit,
         LedgerTransactionType type,
         string description,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? actorUserId = null)
     {
         var latest = await _db.CustomerLedgers.Where(l => l.CustomerId == customer.Id)
             .OrderByDescending(l => l.Id)
@@ -825,7 +852,7 @@ public sealed class BillingService : IBillingService
             TransactionType = type,
             Description = description,
             TransactionDate = DateTime.UtcNow,
-            UserId = _currentUser.UserId,
+            UserId = actorUserId ?? _currentUser.UserId,
             CreatedDate = DateTime.UtcNow,
             IsActive = true
         });
@@ -835,7 +862,7 @@ public sealed class BillingService : IBillingService
 
     private sealed record AppliedStoreDiscount(decimal Amount, string? Name, decimal Percent);
 
-    private async Task<AppliedStoreDiscount> ResolveStoreDiscountAsync(int? discountId, int storeId, decimal eligible, CancellationToken cancellationToken)
+    private async Task<AppliedStoreDiscount> ResolveStoreDiscountAsync(int? discountId, int storeId, decimal eligible, bool allowEcommerceDiscounts, CancellationToken cancellationToken)
     {
         if (!discountId.HasValue)
         {
@@ -847,6 +874,18 @@ public sealed class BillingService : IBillingService
         if (discount.OfferCategory == OfferCategory.Birthday)
         {
             throw new ValidationAppException("Select birthday offers from the birthday offer control, not as a store discount.");
+        }
+
+        if (allowEcommerceDiscounts)
+        {
+            if (!discount.EcommerceOnly)
+            {
+                throw new BusinessAppException("This offer is not available on the online store.");
+            }
+        }
+        else if (discount.EcommerceOnly)
+        {
+            throw new BusinessAppException("This offer is only available on the online store.");
         }
 
         if (!discount.IsActive || discount.StoreId != storeId)
@@ -872,6 +911,28 @@ public sealed class BillingService : IBillingService
             amount,
             discount.Name,
             discount.DiscountKind == DiscountKind.Percentage ? discount.Value : 0);
+    }
+
+    private void EnsureCustomerAccess(Customer customer)
+    {
+        if (string.Equals(_currentUser.Role, Roles.Customer, StringComparison.OrdinalIgnoreCase))
+        {
+            if (customer.Id != _currentUser.UserId)
+            {
+                throw new ForbiddenAppException("You cannot place an order for another customer.");
+            }
+
+            return;
+        }
+
+        _currentUser.Access().EnsureStoreAccess(customer.StoreId);
+    }
+
+    private int StaffActorId(int fallbackUserId)
+    {
+        var isStaff = string.Equals(_currentUser.Role, Roles.Admin, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(_currentUser.Role, Roles.SalesPerson, StringComparison.OrdinalIgnoreCase);
+        return isStaff && _currentUser.UserId > 0 ? _currentUser.UserId : fallbackUserId;
     }
 
     private async Task ApplyItemFulfillmentAsync(BillDto dto, CancellationToken cancellationToken)

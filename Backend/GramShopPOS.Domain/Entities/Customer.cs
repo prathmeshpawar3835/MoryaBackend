@@ -6,6 +6,7 @@ public class Customer : BaseEntity
     public string Name { get; set; } = string.Empty;
     public string MobileNumber { get; set; } = string.Empty;
     public string? Address { get; set; }
+    public string? PasswordHash { get; set; }
     public DateOnly? DateOfBirth { get; set; }
     public string ReferralCode { get; set; } = string.Empty;
     public string CustomerCode { get; set; } = string.Empty;

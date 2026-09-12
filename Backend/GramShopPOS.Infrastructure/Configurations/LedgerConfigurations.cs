@@ -128,6 +128,7 @@ public sealed class BusinessSettingConfiguration : IEntityTypeConfiguration<Busi
         builder.Property(x => x.WhatsAppPhoneNumberId).HasMaxLength(50);
         builder.Property(x => x.WhatsAppAccessToken).HasMaxLength(500);
         builder.Property(x => x.WhatsAppApiBaseUrl).HasMaxLength(200);
+        builder.Property(x => x.EcommerceNotifyMobile).HasMaxLength(20);
     }
 }
 
