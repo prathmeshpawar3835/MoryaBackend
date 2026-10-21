@@ -1,0 +1,1 @@
+function e(e){let t={};for(let[n,r]of Object.entries(e))r!=null&&r!==``&&(typeof r==`boolean`||typeof r==`number`||typeof r==`string`)&&(t[n]=r);return t}export{e as t};

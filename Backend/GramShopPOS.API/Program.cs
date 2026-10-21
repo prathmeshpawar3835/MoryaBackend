@@ -1,3 +1,4 @@
+
 using System.Text;
 using System.Threading.RateLimiting;
 using GramShopPOS.API.Filters;
@@ -23,6 +24,7 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .WriteTo.File("logs/gramshop-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
     .CreateLogger();
+
 builder.Host.UseSerilog();
 
 builder.Services.AddHttpContextAccessor();
@@ -43,6 +45,7 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "1 Gram Jewellery Shop POS / Billing / Inventory backend"
     });
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -52,10 +55,18 @@ builder.Services.AddSwaggerGen(options =>
         In = ParameterLocation.Header,
         Description = "JWT Authorization header using the Bearer scheme."
     });
+
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
             Array.Empty<string>()
         }
     });
@@ -63,6 +74,7 @@ builder.Services.AddSwaggerGen(options =>
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException("Jwt configuration is missing.");
+
 if (string.IsNullOrWhiteSpace(jwt.Key) || jwt.Key.Length < 32)
 {
     throw new InvalidOperationException("Jwt:Key must be at least 32 characters.");
@@ -82,17 +94,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
             ClockSkew = TimeSpan.FromMinutes(1)
         };
+
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = async context =>
             {
                 var jti = context.Principal?.FindFirst("jti")?.Value;
+
                 if (string.IsNullOrWhiteSpace(jti))
                 {
                     return;
                 }
 
                 var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+
                 if (await db.RevokedTokens.AnyAsync(t => t.Jti == jti))
                 {
                     context.Fail("Token has been revoked.");
@@ -100,9 +115,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             }
         };
     });
+
 builder.Services.AddAuthorization();
 
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:5173"];
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Default", policy =>
@@ -114,14 +131,24 @@ builder.Services.AddCors(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
     options.AddPolicy("auth", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = 300, Window = TimeSpan.FromMinutes(1) }));
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 300,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 });
 
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>();
@@ -146,6 +173,9 @@ if (!app.Environment.IsProduction())
 
 app.MapControllers();
 app.MapHealthChecks("/health");
+
+// Serve React frontend and its client-side routes
+app.MapFallbackToFile("index.html");
 
 if (app.Environment.IsDevelopment() || args.Contains("--seed"))
 {
