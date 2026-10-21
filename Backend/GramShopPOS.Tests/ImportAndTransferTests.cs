@@ -178,7 +178,7 @@ public class ImportAndTransferTests
         second.ReferralDiscount.Should().Be(0);
         second.GrandTotal.Should().Be(5150m);
         (await fx.Db.Customers.AsNoTracking().FirstAsync(c => c.Id == referrer.Id)).WalletBalance.Should().Be(750);
-        fx.Db.CustomerLedgers.Should().ContainSingle(r => r.BillId == first.Id && r.DiscountGiven == 500 && r.NewCustomerPercent == 10);
+        fx.Db.Referrals.Should().ContainSingle(r => r.BillId == first.Id && r.DiscountGiven == 500 && r.NewCustomerPercent == 10);
     }
 
     [Fact]
@@ -232,6 +232,7 @@ public class ImportAndTransferTests
                 TransactionType = LedgerTransactionType.Sale,
                 Description = "Sale",
                 TransactionDate = DateTime.UtcNow,
+                UserId = fx.User.UserId,
                 CreatedDate = DateTime.UtcNow,
                 IsActive = true
             },
@@ -244,6 +245,7 @@ public class ImportAndTransferTests
                 Balance = -500,
                 TransactionType = LedgerTransactionType.PaymentReceived,
                 Description = "Payment",
+                UserId = fx.User.UserId,
                 TransactionDate = DateTime.UtcNow,
                 CreatedDate = DateTime.UtcNow,
                 IsActive = true

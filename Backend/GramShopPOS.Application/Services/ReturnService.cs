@@ -72,7 +72,7 @@ public sealed class ReturnService : IReturnService
             SalesPersonId = salesPersonId,
             Items = request.NewItems,
             Payments = request.Payments
-        }, original.StoreId, BillType.Exchange, original.Id, cancellationToken);
+        }, original.StoreId, BillType.Exchange, original.Id, cancellationToken, ret.ReturnAmount);
 
         var entity = await _db.Returns.FirstAsync(r => r.Id == ret.Id, cancellationToken);
         entity.ExchangeBillId = newBill.Id;

@@ -63,7 +63,7 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.ToTable("Customers");
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.MobileNumber).HasMaxLength(20).IsRequired();
-        builder.HasIndex(x => x.MobileNumber).IsUnique();
+        builder.HasIndex(x => new { x.StoreId, x.MobileNumber }).IsUnique();
         builder.Property(x => x.ReferralCode).HasMaxLength(20).IsRequired();
         builder.HasIndex(x => x.ReferralCode).IsUnique();
         builder.Property(x => x.CustomerCode).HasMaxLength(20).IsRequired();

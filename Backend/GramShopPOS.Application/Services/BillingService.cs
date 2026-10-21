@@ -71,7 +71,8 @@ public sealed class BillingService : IBillingService
         int storeId,
         BillType billType,
         int? exchangeOfBillId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        decimal postedExchangeCredit = 0)
     {
         var settings = await _db.BusinessSettings.FirstAsync(cancellationToken);
         var store = await _db.Stores.FirstOrDefaultAsync(s => s.Id == storeId && s.IsActive && !s.IsDeleted, cancellationToken)
@@ -83,6 +84,10 @@ public sealed class BillingService : IBillingService
             customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.CustomerId && !c.IsDeleted, cancellationToken)
                 ?? throw new NotFoundAppException("Customer not found.");
             _currentUser.Access().EnsureStoreAccess(customer.StoreId);
+            if (customer.StoreId != storeId)
+            {
+                throw new ValidationAppException("This customer belongs to a different store. Select or create the customer for this store.");
+            }
         }
 
         var productIds = request.Items.Select(i => i.ProductId).Distinct().ToList();
@@ -155,6 +160,11 @@ public sealed class BillingService : IBillingService
 
                 var original = await _db.Bills.AsNoTracking().FirstOrDefaultAsync(b => b.Id == adj.OriginalBillId, cancellationToken)
                     ?? throw new NotFoundAppException("Original invoice for this return, exchange, or buyback was not found.");
+                if (original.StoreId != storeId)
+                {
+                    throw new ValidationAppException("The original invoice belongs to a different store.");
+                }
+
                 if (original.CustomerId != customer!.Id)
                 {
                     throw new ValidationAppException("The original invoice belongs to a different customer. Select the matching customer before applying a return, exchange, or buyback.");
@@ -178,6 +188,8 @@ public sealed class BillingService : IBillingService
         var returnAdj = Money.Round(createdAdjustments.Where(a => a.ReturnKind == ReturnKind.Return).Sum(a => a.ReturnAmount));
         var exchangeAdj = Money.Round(createdAdjustments.Where(a => a.ReturnKind == ReturnKind.Exchange).Sum(a => a.ReturnAmount));
         var buybackAdj = Money.Round(createdAdjustments.Where(a => a.ReturnKind == ReturnKind.Buyback).Sum(a => a.ReturnAmount));
+        var linkedExchangeCredit = billType == BillType.Exchange ? Money.Round(Math.Max(0, postedExchangeCredit)) : 0;
+        exchangeAdj = Money.Round(exchangeAdj + linkedExchangeCredit);
         var totalAdj = Money.Round(returnAdj + exchangeAdj + buybackAdj);
         var appliedAdj = Money.Round(Math.Min(totalAdj, totals.GrandTotal));
         var creditGenerated = Money.Round(Math.Max(0, totalAdj - totals.GrandTotal));
@@ -381,15 +393,19 @@ public sealed class BillingService : IBillingService
                 await AddLedgerAsync(customer, storeId, bill.Id, billNumber, 0, request.WalletRedeemAmount, LedgerTransactionType.WalletRedeem, $"Credit used in sale {billNumber}", cancellationToken);
             }
 
-            if (creditGenerated > 0)
+            var postedSurplus = billType == BillType.Exchange
+                ? Money.Round(Math.Max(0, linkedExchangeCredit - totals.GrandTotal))
+                : 0;
+            var walletCredit = Money.Round(Math.Max(0, creditGenerated - postedSurplus));
+            if (walletCredit > 0)
             {
-                customer.WalletBalance = Money.Round(customer.WalletBalance + creditGenerated);
+                customer.WalletBalance = Money.Round(customer.WalletBalance + walletCredit);
                 customer.UpdatedDate = DateTime.UtcNow;
                 _db.WalletTransactions.Add(new WalletTransaction
                 {
                     CustomerId = customer.Id,
                     StoreId = storeId,
-                    Amount = creditGenerated,
+                    Amount = walletCredit,
                     BalanceAfter = customer.WalletBalance,
                     TransactionType = LedgerTransactionType.WalletCredit,
                     Description = $"Credit generated from exchange/return/buyback on {billNumber}",

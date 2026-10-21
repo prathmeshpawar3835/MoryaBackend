@@ -358,7 +358,16 @@ public sealed class ReferralService : IReferralService
         }
         else if (!string.IsNullOrWhiteSpace(referringMobile))
         {
-            referrer = await _db.Customers.FirstOrDefaultAsync(c => c.MobileNumber == referringMobile.Trim() && !c.IsDeleted && c.IsActive, cancellationToken);
+            var mobileMatches = _db.Customers.Where(c => c.MobileNumber == referringMobile.Trim() && !c.IsDeleted && c.IsActive);
+            if (settings.ReferralStoreWise)
+            {
+                mobileMatches = mobileMatches.Where(c => c.StoreId == storeId);
+            }
+
+            referrer = await mobileMatches
+                .OrderBy(c => c.StoreId == storeId ? 0 : 1)
+                .ThenBy(c => c.Id)
+                .FirstOrDefaultAsync(cancellationToken);
             if (referrer is null && requireValidCode)
             {
                 throw new ValidationAppException("Referring customer mobile was not found.");

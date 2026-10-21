@@ -873,15 +873,15 @@ namespace GramShopPOS.Infrastructure.Migrations
                     b.HasIndex("CustomerCode")
                         .IsUnique();
 
-                    b.HasIndex("MobileNumber")
-                        .IsUnique();
-
                     b.HasIndex("ReferralCode")
                         .IsUnique();
 
                     b.HasIndex("ReferredByCustomerId");
 
                     b.HasIndex("StoreId");
+
+                    b.HasIndex("StoreId", "MobileNumber")
+                        .IsUnique();
 
                     b.ToTable("Customers", (string)null);
                 });

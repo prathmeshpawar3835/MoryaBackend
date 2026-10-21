@@ -70,18 +70,25 @@ public sealed class CustomerService : ICustomerService
 
         BusinessCalendar.EnsureValidDateOfBirth(request.DateOfBirth);
 
-        if (await _db.Customers.AnyAsync(c => c.MobileNumber == request.MobileNumber.Trim() && !c.IsDeleted, cancellationToken))
+        var mobile = request.MobileNumber.Trim();
+        if (await _db.Customers.AnyAsync(c => c.StoreId == storeId && c.MobileNumber == mobile && !c.IsDeleted, cancellationToken))
         {
-            throw new ConflictAppException("A customer with this mobile number already exists.");
+            throw new ConflictAppException("A customer with this mobile number already exists in this store.");
         }
 
+        var settings = await _db.BusinessSettings.AsNoTracking().FirstAsync(cancellationToken);
         int? referrerId = null;
         if (!string.IsNullOrWhiteSpace(request.ReferralCode))
         {
-            var referrer = await CustomerReferral.MatchingCode(_db.Customers.Where(c => !c.IsDeleted && c.IsActive), request.ReferralCode)
-                .FirstOrDefaultAsync(cancellationToken)
+            var referrerQuery = CustomerReferral.MatchingCode(_db.Customers.Where(c => !c.IsDeleted && c.IsActive), request.ReferralCode);
+            if (settings.ReferralStoreWise)
+            {
+                referrerQuery = referrerQuery.Where(c => c.StoreId == storeId);
+            }
+
+            var referrer = await referrerQuery.FirstOrDefaultAsync(cancellationToken)
                 ?? throw new ValidationAppException("Invalid customer / referral code.");
-            if (referrer.MobileNumber == request.MobileNumber.Trim())
+            if (referrer.StoreId == storeId && referrer.MobileNumber == mobile)
             {
                 throw new ValidationAppException("A customer cannot refer themselves.");
             }
@@ -90,20 +97,23 @@ public sealed class CustomerService : ICustomerService
         }
         else if (!string.IsNullOrWhiteSpace(request.ReferringMobileNumber))
         {
-            if (request.ReferringMobileNumber.Trim() == request.MobileNumber.Trim())
+            if (request.ReferringMobileNumber.Trim() == mobile)
             {
                 throw new ValidationAppException("A customer cannot refer themselves.");
             }
 
-            referrerId = await _db.Customers.Where(c => c.MobileNumber == request.ReferringMobileNumber.Trim() && !c.IsDeleted).Select(c => (int?)c.Id).FirstOrDefaultAsync(cancellationToken)
-                ?? throw new ValidationAppException("Referring customer mobile was not found.");
+            referrerId = await _db.Customers
+                .Where(c => c.StoreId == storeId && c.MobileNumber == request.ReferringMobileNumber.Trim() && !c.IsDeleted)
+                .Select(c => (int?)c.Id)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw new ValidationAppException("Referring customer mobile was not found in this store.");
         }
 
         var customer = new Customer
         {
             StoreId = storeId,
             Name = request.Name.Trim(),
-            MobileNumber = request.MobileNumber.Trim(),
+            MobileNumber = mobile,
             Address = request.Address,
             DateOfBirth = request.DateOfBirth,
             ReferralCode = await CustomerReferral.NextCodeAsync(_db, cancellationToken),
@@ -126,9 +136,9 @@ public sealed class CustomerService : ICustomerService
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Customer not found.");
         _currentUser.Access().EnsureStoreAccess(customer.StoreId);
-        if (await _db.Customers.AnyAsync(c => c.MobileNumber == request.MobileNumber.Trim() && c.Id != id && !c.IsDeleted, cancellationToken))
+        if (await _db.Customers.AnyAsync(c => c.StoreId == customer.StoreId && c.MobileNumber == request.MobileNumber.Trim() && c.Id != id && !c.IsDeleted, cancellationToken))
         {
-            throw new ConflictAppException("A customer with this mobile number already exists.");
+            throw new ConflictAppException("A customer with this mobile number already exists in this store.");
         }
 
         BusinessCalendar.EnsureValidDateOfBirth(request.DateOfBirth);
@@ -180,7 +190,13 @@ public sealed class CustomerService : ICustomerService
             q = q.Where(c => c.StoreId == resolved);
         }
 
-        var dto = await q.Select(MapExpr()).FirstOrDefaultAsync(cancellationToken);
+        var matches = await q.OrderBy(c => c.Id).Take(2).Select(MapExpr()).ToListAsync(cancellationToken);
+        if (matches.Count > 1)
+        {
+            throw new ValidationAppException("This mobile number exists in more than one store. Select a store to continue.");
+        }
+
+        var dto = matches.FirstOrDefault();
         if (dto is not null && string.IsNullOrWhiteSpace(dto.ReferralCode))
         {
             dto.ReferralCode = await CustomerReferral.EnsureAsync(_db, dto.Id, cancellationToken);
@@ -351,6 +367,10 @@ public sealed class CustomerService : ICustomerService
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId && !c.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Customer not found.");
         _currentUser.Access().EnsureStoreAccess(customer.StoreId);
+        if (customer.StoreId != storeId)
+        {
+            throw new ValidationAppException("This customer belongs to a different store.");
+        }
 
         var payment = new Payment
         {
@@ -455,6 +475,11 @@ public sealed class CustomerService : ICustomerService
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId && !c.IsDeleted, cancellationToken)
             ?? throw new NotFoundAppException("Customer not found.");
         _currentUser.Access().EnsureStoreAccess(customer.StoreId);
+        if (customer.StoreId != storeId)
+        {
+            throw new ValidationAppException("This customer belongs to a different store.");
+        }
+
         CreditUsage.EnsureWithinBalance(customer.WalletBalance, request.Amount);
 
         var rows = await _db.Customers

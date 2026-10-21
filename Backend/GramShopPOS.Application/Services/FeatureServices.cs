@@ -358,6 +358,11 @@ public sealed class RepairService : IRepairService
             var bill = await _db.Bills.Include(b => b.Items).FirstOrDefaultAsync(b => b.Id == request.BillId, cancellationToken)
                 ?? throw new NotFoundAppException("Invoice not found.");
             _currentUser.Access().EnsureStoreAccess(bill.StoreId);
+            if (bill.StoreId != storeId)
+            {
+                throw new ValidationAppException("The invoice belongs to a different store.");
+            }
+
             request.InvoiceNumber ??= bill.BillNumber;
             request.CustomerId ??= bill.CustomerId;
             if (request.BillItemId.HasValue)
@@ -375,10 +380,21 @@ public sealed class RepairService : IRepairService
         if (!request.CustomerId.HasValue)
         {
             var matched = await _db.Customers.AsNoTracking()
-                .FirstOrDefaultAsync(c => c.MobileNumber == request.MobileNumber.Trim() && !c.IsDeleted, cancellationToken);
+                .FirstOrDefaultAsync(c => c.StoreId == storeId && c.MobileNumber == request.MobileNumber.Trim() && !c.IsDeleted, cancellationToken);
             if (matched != null)
             {
                 request.CustomerId = matched.Id;
+            }
+        }
+
+        if (request.CustomerId is int linkedCustomerId)
+        {
+            var linked = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == linkedCustomerId && !c.IsDeleted, cancellationToken)
+                ?? throw new NotFoundAppException("Customer not found.");
+            _currentUser.Access().EnsureStoreAccess(linked.StoreId);
+            if (linked.StoreId != storeId)
+            {
+                throw new ValidationAppException("This customer belongs to a different store.");
             }
         }
 

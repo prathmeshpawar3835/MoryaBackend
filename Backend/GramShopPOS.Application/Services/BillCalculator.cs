@@ -136,7 +136,7 @@ public static class BillCalculator
         var required = Money.Round(grandTotal - creditAmount);
         if (paid != required)
         {
-            throw new InvalidOperationException("Total payments must equal the required payment amount.");
+            throw new InvalidOperationException($"Total payments must equal the required payment amount of {required:0.00}. Received {paid:0.00}.");
         }
     }
 }
