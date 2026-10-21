@@ -93,7 +93,7 @@ public sealed class DiscountService : IDiscountService
         _db.StoreDiscounts.Add(entity);
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.DiscountCreated, nameof(StoreDiscount), entity.Id.ToString(), null, entity, request.StoreId, cancellationToken);
-        return (await GetAsync(request.StoreId, false, entity.OfferCategory, cancellationToken)).First(d => d.Id == entity.Id);
+        return (await GetAsync(request.StoreId, false, entity.OfferCategory, true, cancellationToken)).First(d => d.Id == entity.Id);
     }
 
     public async Task<StoreDiscountDto> UpdateAsync(int id, StoreDiscountRequest request, CancellationToken cancellationToken = default)
@@ -115,7 +115,7 @@ public sealed class DiscountService : IDiscountService
         entity.UpdatedBy = _currentUser.UserId;
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.LogAsync(AuditActions.DiscountUpdated, nameof(StoreDiscount), id.ToString(), null, entity, entity.StoreId, cancellationToken);
-        return (await GetAsync(entity.StoreId, false, entity.OfferCategory, cancellationToken)).First(d => d.Id == id);
+        return (await GetAsync(entity.StoreId, false, entity.OfferCategory, true, cancellationToken)).First(d => d.Id == id);
     }
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
