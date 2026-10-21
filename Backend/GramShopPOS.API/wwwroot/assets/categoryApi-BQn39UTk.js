@@ -1,0 +1,1 @@
+import{t as e}from"./axiosClient-CBwa65Ev.js";var t={list:async()=>(await e.get(`/categories`)).data,get:async t=>(await e.get(`/categories/${t}`)).data,create:async t=>(await e.post(`/categories`,t)).data,update:async(t,n)=>(await e.put(`/categories/${t}`,n)).data,remove:async t=>{await e.delete(`/categories/${t}`)}};export{t};

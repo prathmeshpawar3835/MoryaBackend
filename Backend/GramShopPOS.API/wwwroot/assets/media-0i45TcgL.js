@@ -1,0 +1,1 @@
+function e(){return`/api`.replace(/\/api\/?$/,``)}function t(t,n){let r=t||n||`/images/default-jewellery.svg`;return r.startsWith(`http`)||r.startsWith(`/images/`)?r:`${e()}${r.startsWith(`/`)?r:`/${r}`}`}export{t};

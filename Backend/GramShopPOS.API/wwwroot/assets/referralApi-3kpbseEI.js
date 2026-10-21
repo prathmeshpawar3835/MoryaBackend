@@ -1,0 +1,1 @@
+import{t as e}from"./axiosClient-CBwa65Ev.js";import{t}from"./query-U0Cyhx2n.js";var n={list:async n=>(await e.get(`/referrals`,{params:t({...n})})).data,validate:async(n,r,i)=>(await e.get(`/referrals/validate`,{params:t({code:n,excludeCustomerId:r,storeId:i})})).data};export{n as t};
